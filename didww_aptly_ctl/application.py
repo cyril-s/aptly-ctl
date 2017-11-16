@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
-from lib.defaults import defaults
-import lib.plugins
+from didww_aptly_ctl.defaults import defaults
+import didww_aptly_ctl.plugins
 
-if __name__ == "__main__":
+def main():
     # main parser
     parser = argparse.ArgumentParser(
             description="Aptly API client with convenient defaults and functions.")
@@ -17,11 +17,12 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(dest="subcommand")
 
     # init subparsers
-    for plugin in lib.plugins.__all__:
-        eval("lib.plugins.%s.config_subparser(subparsers)" % plugin)
+    for plugin in didww_aptly_ctl.plugins.__all__:
+        eval("didww_aptly_ctl.plugins.%s.config_subparser(subparsers)" % plugin)
 
     args = parser.parse_args()
     # run subcommand
+    #TODO catch plugin excepions and print them as errors. With debug print backtrace
     if args.subcommand:
         print(args.subcommand)
         args.func(args)

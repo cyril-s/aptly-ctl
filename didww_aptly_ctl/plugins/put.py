@@ -24,7 +24,7 @@ def config_subparser(subparsers_action_object):
     parser_put.add_argument("packages", metavar="package", nargs="+", help="Pakcage to upload.")
 
 
-def custom_publish_update(args):
+def _custom_publish_update(args):
     full_url = "{0}/publish/{1}/{1}".format(args.url, args.release)
     data = {
             "Signing": {
@@ -37,6 +37,7 @@ def custom_publish_update(args):
         r.raise_for_status()
     except HTTPError as e:
         raise AptlyAPIException(e, status_code=e.response.status_code)
+    #TODO return PublishEndpoint
     return (r.status_code, r.request.url)
 
 
@@ -52,6 +53,7 @@ def put(args):
         upload_result = aptly.files.upload(directory, *args.packages)
     except ConnectionError as e:
         print("ERR:", e)
+        #TODO better throw exception
         return
         
     # Add them to repo
@@ -81,7 +83,7 @@ def put(args):
                 # aptly_api 0.1.5 throws exception when sign_gpgkey is not passed.
                 # But it is ok because aplty polls gpg agent for key from keyring.
                 # So we update publish here manually.
-                (update_result, update_url) = custom_publish_update(args)
+                (update_result, update_url) = _custom_publish_update(args)
                 if update_result == 200:
                     print("INFO: Updated publish at %s" % update_url)
             else:
