@@ -8,10 +8,14 @@ Does 3 things:
 Uses aptly-api-client (https://github.com/gopythongo/aptly-api-client)
 """
 
+import logging
 from datetime import datetime
 from aptly_api import Client
 from requests import put as requests_put, HTTPError, ConnectionError
 from aptly_api.base import AptlyAPIException
+from didww_aptly_ctl.exceptions import DidwwAptlyCtlException
+
+logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     parser_put = subparsers_action_object.add_parser("put",
@@ -24,19 +28,23 @@ def config_subparser(subparsers_action_object):
     parser_put.add_argument("packages", metavar="package", nargs="+", help="Pakcage to upload.")
 
 
+def _remove_upload_dir(client, directory):
+    logger.info("Trying to remove upload directory %s" % directory)
+    client.files.delete(path=directory)
+    logger.info("Managed to remove upload directory %s" % directory)
+
+
 def _custom_publish_update(args):
     full_url = "{0}/publish/{1}/{1}".format(args.url, args.release)
-    data = {
-            "Signing": {
-                "PassphraseFile": args.pass_file
-                }
-            }
+    data = dict()
+    data["Signing"] = dict()
+    data["Signing"]["PassphraseFile"] = args.pass_file
     #data["Signing"]["GpgKey"] = "/home/pkg/didww.pgp" # to get 500 uncomment this
     try:
         r = requests_put(full_url, json=data)
         r.raise_for_status()
     except HTTPError as e:
-        raise AptlyAPIException(e, status_code=e.response.status_code)
+        raise DidwwAptlyCtlException(e, logger=logger)
     #TODO return PublishEndpoint
     return (r.status_code, r.request.url)
 
@@ -48,36 +56,53 @@ def put(args):
     aptly = Client(args.url)
 
     # Upload packages
-    print("INFO: Uploading packages\n  {}\nto repo {} on {}".format("\n  ".join(args.packages), repo, args.url))
+    logger.info("Uploading the packages below to repo {} on {}".format(repo, args.url))
+    for p in args.packages:
+        logger.info("    " + p)
     try:
         upload_result = aptly.files.upload(directory, *args.packages)
     except ConnectionError as e:
-        print("ERR:", e)
-        #TODO better throw exception
-        return
+        raise DidwwAptlyCtlException(e, logger=logger)
+
+    if len(upload_result) == 0:
+        raise DidwwAptlyCtlException("Failed to upload any package.", logger=logger)
         
     # Add them to repo
-    print("INFO: Adding packages to repo.")
-    if len(upload_result) != 0:
+    logger.info("Adding packages to repo.")
+    try:
         add_result = aptly.repos.add_uploaded_file(repo, directory)
-        for failed in add_result.failed_files:
-            print("WARN: Failed to add %s to %s" % (failed, repo))
-        for warning in add_result.report["Warnings"]:
-            print("WARN: %s" % warning)
-        for added in add_result.report["Added"]:
-            print("INFO: Added %s to %s" % (added, repo))
-        for removed in add_result.report["Removed"]:
-            print("INFO: Removed %s to %s" % (removed, repo))
-    else:
-        print("ERR: Failed to upload any package.")
-        return
+    except AptlyAPIException as e:
+        logger.error("Failed to add files to repo. API returned %s" % e.status_code)
+        try:
+            _remove_upload_dir(aptly, directory)
+        except Exception as e2:
+            logger.error("Failed to remove upload directory %s" % directory)
+            raise DidwwAptlyCtlException(e2, logger=logger)
+        raise DidwwAptlyCtlException(e, logger=logger)
+    except ConnectionError as e:
+        raise DidwwAptlyCtlException(e, logger=logger)
+
+    for failed in add_result.failed_files:
+        logger.warn("Failed to add %s to %s" % (failed, repo))
+    for warning in add_result.report["Warnings"]:
+        logger.warn(warning)
+    for added in add_result.report["Added"]:
+        logger.info("%s to %s" % (added, repo))
+    for removed in add_result.report["Removed"]:
+        logger.info("Removed %s to %s" % (removed, repo))
+
+    if len(add_result.failed_files) != 0:
+        _remove_upload_dir(aptly, directory)
 
     # Update publish
-    if len(add_result.report["Added"]) + len(add_result.report["Removed"]) != 0:
+    if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
+        logger.warn("Skipping publish update.")
+        raise DidwwAptlyCtlException("Nothing added or removed.", logger=logger)
+    else:
         try:
             update_result = aptly.publish.update(prefix=args.release,
                     distribution=args.release, sign_passphrase_file=args.pass_file)
-            print(update_result)
+            logger.info("Updated publish.")
         except AptlyAPIException as e:
             if e.args[0] == "Update needs a gpgkey to sign with if sign_skip is False":
                 # aptly_api 0.1.5 throws exception when sign_gpgkey is not passed.
@@ -85,11 +110,10 @@ def put(args):
                 # So we update publish here manually.
                 (update_result, update_url) = _custom_publish_update(args)
                 if update_result == 200:
-                    print("INFO: Updated publish at %s" % update_url)
+                    logger.info("Updated publish at %s" % update_url)
             else:
-                raise e
-    else:
-        print("WARN: Nothing added or removed. Skipping publish update.")
-        return
+                raise DidwwAptlyCtlException(e, logger=logger)
+
+    return 0
 
 
