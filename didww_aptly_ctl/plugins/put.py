@@ -13,6 +13,7 @@ from datetime import datetime
 from aptly_api import Client
 from requests import put as requests_put, HTTPError, ConnectionError
 from aptly_api.base import AptlyAPIException
+from aptly_api.parts.publish import PublishAPISection
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlException
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,8 @@ def _custom_publish_update(args):
         r.raise_for_status()
     except HTTPError as e:
         raise DidwwAptlyCtlException(e, logger=logger)
-    #TODO return PublishEndpoint
-    return (r.status_code, r.request.url)
+
+    return PublishAPISection.endpoint_from_response(r.json())
 
 
 def put(args):
@@ -94,26 +95,26 @@ def put(args):
     if len(add_result.failed_files) != 0:
         _remove_upload_dir(aptly, directory)
 
-    # Update publish
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")
         raise DidwwAptlyCtlException("Nothing added or removed.", logger=logger)
-    else:
-        try:
-            update_result = aptly.publish.update(prefix=args.release,
-                    distribution=args.release, sign_passphrase_file=args.pass_file)
-            logger.info("Updated publish.")
-        except AptlyAPIException as e:
-            if e.args[0] == "Update needs a gpgkey to sign with if sign_skip is False":
-                # aptly_api 0.1.5 throws exception when sign_gpgkey is not passed.
-                # But it is ok because aplty polls gpg agent for key from keyring.
-                # So we update publish here manually.
-                (update_result, update_url) = _custom_publish_update(args)
-                if update_result == 200:
-                    logger.info("Updated publish at %s" % update_url)
-            else:
-                raise DidwwAptlyCtlException(e, logger=logger)
 
+    # Update publish
+    update_result = None
+    try:
+        update_result = aptly.publish.update(prefix=args.release,
+                distribution=args.release, sign_passphrase_file=args.pass_file)
+    except AptlyAPIException as e:
+        # aptly_api 0.1.5 throws exception when sign_gpgkey is not passed.
+        # But it is ok because aplty polls gpg agent for key from keyring.
+        # So we update publish here manually.
+        if e.args[0] == "Update needs a gpgkey to sign with if sign_skip is False":
+            update_result = _custom_publish_update(args)
+        else:
+            raise DidwwAptlyCtlException(e, logger=logger)
+
+    logger.info("Updated publish.")
+    logger.debug(update_result)
     return 0
 
 
