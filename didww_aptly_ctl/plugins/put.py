@@ -11,10 +11,9 @@ Uses aptly-api-client (https://github.com/gopythongo/aptly-api-client)
 import logging
 from datetime import datetime
 from aptly_api import Client
-from requests import put as requests_put, HTTPError, ConnectionError
 from aptly_api.base import AptlyAPIException
-from aptly_api.parts.publish import PublishAPISection
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlException
+from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
+from didww_aptly_ctl.utils import publish_update
 
 logger = logging.getLogger(__name__)
 
@@ -30,24 +29,13 @@ def config_subparser(subparsers_action_object):
 
 
 def _remove_upload_dir(client, directory):
-    logger.info("Trying to remove upload directory %s" % directory)
-    client.files.delete(path=directory)
-    logger.info("Managed to remove upload directory %s" % directory)
-
-
-def _custom_publish_update(args):
-    full_url = "{0}/publish/{1}/{1}".format(args.url, args.release)
-    data = dict()
-    data["Signing"] = dict()
-    data["Signing"]["PassphraseFile"] = args.pass_file
-    #data["Signing"]["GpgKey"] = "/home/pkg/didww.pgp" # to get 500 uncomment this
     try:
-        r = requests_put(full_url, json=data)
-        r.raise_for_status()
-    except HTTPError as e:
-        raise DidwwAptlyCtlException(e, logger=logger)
-
-    return PublishAPISection.endpoint_from_response(r.json())
+        client.files.delete(path=directory)
+    except Exception as e:
+        logger.error("Failed to remove upload directory %s" % directory)
+        raise
+    else:
+        logger.info("Remove upload directory %s" % directory)
 
 
 def put(args):
@@ -60,28 +48,24 @@ def put(args):
     logger.info("Uploading the packages below to repo {} on {}".format(repo, args.url))
     for p in args.packages:
         logger.info("    " + p)
-    try:
-        upload_result = aptly.files.upload(directory, *args.packages)
-    except ConnectionError as e:
-        raise DidwwAptlyCtlException(e, logger=logger)
+    upload_result = aptly.files.upload(directory, *args.packages)
 
     if len(upload_result) == 0:
-        raise DidwwAptlyCtlException("Failed to upload any package.", logger=logger)
+        raise DidwwAptlyCtlError("Failed to upload any package.", logger=logger)
         
     # Add them to repo
     logger.info("Adding packages to repo.")
+    add_result = None
     try:
         add_result = aptly.repos.add_uploaded_file(repo, directory)
     except AptlyAPIException as e:
-        logger.error("Failed to add files to repo. API returned %s" % e.status_code)
-        try:
+        raise DidwwAptlyCtlError(
+                "Failed to add files to repo. API returned %s" % e.status_code,
+                original_exception=e,
+                logger=logger)
+    finally:
+        if add_result is not None and len(add_result.failed_files) != 0:
             _remove_upload_dir(aptly, directory)
-        except Exception as e2:
-            logger.error("Failed to remove upload directory %s" % directory)
-            raise DidwwAptlyCtlException(e2, logger=logger)
-        raise DidwwAptlyCtlException(e, logger=logger)
-    except ConnectionError as e:
-        raise DidwwAptlyCtlException(e, logger=logger)
 
     for failed in add_result.failed_files:
         logger.warn("Failed to add %s to %s" % (failed, repo))
@@ -92,29 +76,15 @@ def put(args):
     for removed in add_result.report["Removed"]:
         logger.info("Removed %s to %s" % (removed, repo))
 
-    if len(add_result.failed_files) != 0:
-        _remove_upload_dir(aptly, directory)
-
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")
-        raise DidwwAptlyCtlException("Nothing added or removed.", logger=logger)
+        raise DidwwAptlyCtlError("Nothing added or removed.", logger=logger)
 
     # Update publish
-    update_result = None
-    try:
-        update_result = aptly.publish.update(prefix=args.release,
-                distribution=args.release, sign_passphrase_file=args.pass_file)
-    except AptlyAPIException as e:
-        # aptly_api 0.1.5 throws exception when sign_gpgkey is not passed.
-        # But it is ok because aplty polls gpg agent for key from keyring.
-        # So we update publish here manually.
-        if e.args[0] == "Update needs a gpgkey to sign with if sign_skip is False":
-            update_result = _custom_publish_update(args)
-        else:
-            raise DidwwAptlyCtlException(e, logger=logger)
-
-    logger.info("Updated publish.")
+    update_result = publish_update(aptly, args.release, args.release, args.pass_file)
+    logger.info("Updated publish {0}/{0}".format(args.release))
     logger.debug(update_result)
+
     return 0
 
 

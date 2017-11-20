@@ -1,8 +1,10 @@
 import argparse
 import logging
 import sys
+import requests.exceptions
 from didww_aptly_ctl.defaults import defaults
 from didww_aptly_ctl import app_logger
+from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 import didww_aptly_ctl.plugins
 
 def _init_logging(level):
@@ -51,18 +53,24 @@ def main():
     logger = logging.getLogger(__name__)
 
     # run subcommand
-    if args.subcommand:
+    if not args.subcommand:
+        parser.print_help()
+    else:
         logger.info("Running %s plugin." % args.subcommand)
         try:
             sys.exit(args.func(args))
-        except Exception as e:
+        except DidwwAptlyCtlError as e:
             exc_logger = getattr(e, "logger", logger)
             if args.log_level.upper() == "DEBUG":
-                exc_logger.exception(e)
+                exc_logger.exception(e.msg)
             else:
-                exc_logger.error(e)
+                exc_logger.error(e.msg)
             sys.exit(1)
-    else:
-        parser.print_help()
+        except requests.exceptions.ConnectionError as e:
+            if args.log_level.upper() == "DEBUG":
+                logger.exception(e)
+            else:
+                logger.error(e)
+            sys.exit(1)
 
 

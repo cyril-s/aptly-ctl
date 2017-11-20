@@ -1,10 +1,13 @@
+class DidwwAptlyCtlError(Exception):
+    def __init__(self, msg, original_exception=None, logger=None):
+        if original_exception:
+            self.msg = ": ".join([msg, str(original_exception)])
+        else:
+            self.msg = msg
 
-class DidwwAptlyCtlException(Exception):
+        if logger:
+            self.logger = logger
 
-    def __init__(self,  *args, **kwargs):
-        # To allow printing exceptions from outer handling function to log it
-        # using logger of function raising the exception so we can see from which module and
-        # function exeption came
-        if "logger" in kwargs:
-            self.logger = kwargs.pop("logger")
-        super(DidwwAptlyCtlException, self).__init__(*args, **kwargs)
+        if original_exception:
+            self.original_exception = original_exception
+
