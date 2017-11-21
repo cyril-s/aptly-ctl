@@ -64,7 +64,7 @@ def put(args):
                 original_exception=e,
                 logger=logger)
     finally:
-        if add_result is not None and len(add_result.failed_files) != 0:
+        if add_result is None or len(add_result.failed_files) != 0:
             _remove_upload_dir(aptly, directory)
 
     for failed in add_result.failed_files:
