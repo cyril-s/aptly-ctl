@@ -19,8 +19,8 @@ def aptly_key_to_direct_reference(key):
     if not m or len(m.groups()) != 4:
         raise ValueError('Incorrect aptly key "%s"' % key)
 
-    dir_ref = "_".join([m.group(1), m.group(2), m.group(0)])
-    return (dir_ref, m.group(3))
+    dir_ref = "_".join([m.group(2), m.group(3), m.group(1)])
+    return (dir_ref, m.group(4))
 
 
 def direct_reference_to_aptly_key(client, repo, dir_ref):
