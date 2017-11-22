@@ -52,7 +52,7 @@ def copy(args):
         elif match(direct_reference_regex, r):
             dir_refs_to_validate.append(r)
         else:
-            raise DidwwAptlyCtlException("Incorrect package reference: %s" % r, logger=logger)
+            raise DidwwAptlyCtlError("Incorrect package reference: %s" % r, logger=logger)
 
     keys = []
     for r in dir_refs_to_validate:
