@@ -1,11 +1,13 @@
 """
 usage: didww-aptly-cli.py put [-h] [-U <seconds>] release component dist package [package ...]
 
+Uses aptly-api-client (https://github.com/gopythongo/aptly-api-client)
 Does 3 things:
     * Upload packages to aptly server;
     * Adds packages to specified repo;
     * Updates correspoding publish.
-Uses aptly-api-client (https://github.com/gopythongo/aptly-api-client)
+
+STDOUT: List of direct references of added packages
 """
 
 import logging
@@ -71,8 +73,10 @@ def put(args):
         logger.warn("Failed to add %s to %s" % (failed, repo))
     for warning in add_result.report["Warnings"]:
         logger.warn(warning)
+    added_dir_refs = []
     for added in add_result.report["Added"]:
         logger.info("%s to %s" % (added, repo))
+        added_dir_refs.append(added.split(" ")[0])
     for removed in add_result.report["Removed"]:
         logger.info("Removed %s to %s" % (removed, repo))
 
@@ -84,6 +88,7 @@ def put(args):
     update_result = publish_update(aptly, args.release, args.release, args.pass_file)
     logger.info("Updated publish {0}/{0}".format(args.release))
     logger.debug(update_result)
+    print("\n".join(added_dir_refs))
 
     return 0
 
