@@ -80,8 +80,9 @@ def publish_update(client, prefix, distribution, pass_file):
                         prefix, distribution,
                         pass_file)
             except requests.exceptions.HTTPError as e:
+                err_data = e.response.json()
                 raise DidwwAptlyCtlError(
-                        "Failed to update publish %s/%s manually" % (prefix, distribution),
+                        "Failed to update publish %s/%s manually: %s" % (prefix, distribution, err_data),
                         original_exception = e,
                         logger = logger)
 
