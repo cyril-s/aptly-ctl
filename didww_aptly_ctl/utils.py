@@ -36,9 +36,9 @@ def direct_reference_to_aptly_key(client, repo, dir_ref):
     if len(search_result) == 0:
         key = None
     elif len(search_result) == 1:
-        key = search_result[0]["key"]
+        key = search_result[0][0]
     else:
-        keys = [ k["key"] for k in search_result ]
+        keys = [ k[0] for k in search_result ]
         raise DidwwAptlyCtlError("Search by direct reference {} returned many results: {}".format(dir_ref, keys), logger=logger)
 
     return key
@@ -89,3 +89,27 @@ def publish_update(client, prefix, distribution, pass_file):
     return update_result
 
 
+def search_package_in_repo(client, repo, name=None, version=None, architecture=None):
+    """
+    Simple interface to query aply local repos for packages.
+    It searches by control file fields (namely Name, Version, Architecture)
+    Name and Architecture are searched by wildcard ([^]?* symbols).
+    Version filed is searched  by operators >=, <=, =, >>, << according to apt rules.
+    Operator must precede version (e.g. ">=1.0.1" or ">= 1.0.1"). If not, default is '='.
+    Fields search expressions are ANDed together.
+    It returns list of keys of found packages.
+    """
+    query_parts = []
+    if name:
+        query_parts.append("Name (% {})".format(name))
+    if version:
+        query_parts.append("$Version ({})".format(version))
+    if architecture:
+        query_parts.append("$Architecture (% {})".format(architecture))
+
+    query = ", ".join(query_parts)
+    search_result = client.repos.search_packages(repo, query)
+    
+    return [ s[0] for s in search_result ]
+
+ 
