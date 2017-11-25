@@ -33,3 +33,23 @@ Do:
 * Use module level `logger = logging.getLogger(__name__)`
 * Log event using `logger`. Messages go to stderr. Use `print()` if your plugin has output
 * Use `didww_aptly_ctl.exceptions.DidwwAptlyCtlError` exception
+
+Here is blueprint to start:
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+def config_subparser(subparsers_action_object):
+    parser_remove = subparsers_action_object.add_parser("remove",
+        description="Removes packages from local repos.",
+        help=       "Removes packages from local repos.")
+    # entry point function
+    parser_copy.set_defaults(func=remove)
+    parser_copy.add_argument("-r", "--repo", help="Repo name from where to remove packages.")
+
+
+def remove(args):
+    logger.info("My args: %s" % args)
+    return 0
+```
