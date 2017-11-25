@@ -33,8 +33,9 @@ def main():
     parser.add_argument("--pass-file", metavar="<path>",
             default=defaults["publish"]["passphraze_file"],
             help="Path to gpg passphraze file local to aptly server.")
-    parser.add_argument("-L", "--log-level", metavar="<level>", default=defaults["global"]["log-level"],
-            help="Log level. Can be debug, info. warning, error, critical. Default info.")
+    parser.add_argument("-L", "--log-level",
+            choices=["debug", "info", "warn", "error", "critical"],
+            default=defaults["global"]["log-level"])
 
     subparsers = parser.add_subparsers(dest="subcommand")
 
