@@ -77,4 +77,5 @@ def search(args):
             raise
 
     print(json.dumps(result))
+    return 0
 
