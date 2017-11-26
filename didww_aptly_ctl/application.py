@@ -36,6 +36,10 @@ def main():
     parser.add_argument("-L", "--log-level",
             choices=["debug", "info", "warn", "error", "critical"],
             default=defaults["global"]["log-level"])
+    parser.add_argument("-C", "--continue", dest="cont", action="store_true",
+            help="Continue if error occured.")
+    parser.add_argument("--dry-run", action="store_true",
+            help="Do not perform any action.")
 
     subparsers = parser.add_subparsers(dest="subcommand")
 
