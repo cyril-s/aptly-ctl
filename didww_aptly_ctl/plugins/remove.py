@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     descr_msg = """
-    Removes packages from local repos.
+    Remove packages from local repos.
     """
     parser_remove = subparsers_action_object.add_parser("remove",
         description=descr_msg,

@@ -40,6 +40,8 @@ def main():
             help="Continue if error occured.")
     parser.add_argument("--dry-run", action="store_true",
             help="Do not perform any action.")
+    parser.add_argument("--fmt", choices=["yaml", "json"], default="yaml",
+            help="Output format.")
 
     subparsers = parser.add_subparsers(dest="subcommand")
 

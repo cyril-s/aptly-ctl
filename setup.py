@@ -10,7 +10,7 @@ setup(
     author="Kirill Shestakov",
     author_email="kirill.sh@didww.com",
     description="Some scripts to automate work with Aptly API with convenient defaults.",
-    install_requires=["aptly-api-client"],
+    install_requires=["aptly-api-client", "PyYAML", "requests"],
     python_requires=">=3",
     entry_points={
         "console_scripts":
