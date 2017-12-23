@@ -2,8 +2,9 @@ import logging
 import json
 from aptly_api import Client
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.utils import search_package_in_repo
+from didww_aptly_ctl.utils.misc import search_package_in_repo
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
+from didww_aptly_ctl.utils import SerializedIO, AptlyKey
 
 logger = logging.getLogger(__name__)
 
@@ -12,17 +13,19 @@ def config_subparser(subparsers_action_object):
     Search package in Aptly repo. If query_string is specified, -n, -v, -a options are ignored.
     If no option is specified, lists all packages in all repos.
     -n, -v and -a options are ANDed.
-    STDOUT: json of search results.
-    query_string format: https://www.aptly.info/doc/feature/query/.
+    STDOUT: dictionary of repos names as keys and found keys list as values serialized in specified format.
+    query_string format docs - https://www.aptly.info/doc/feature/query/.
     """
     parser_search = subparsers_action_object.add_parser("search",
             description=descr_msg, help="Search packages.")
     parser_search.set_defaults(func=search)
-    parser_search.add_argument("-r", "--repo", help="Limit search to specified repo.")
+    parser_search.add_argument("-r", "--repo", help="Limit search to specified repos.")
     parser_search.add_argument("-n", "--name",
             help="Name of package to search for. Can be wildcard ('[^]?*' symbols)")
     parser_search.add_argument("-v", "--version",
-            help="Version of package to search for. Version filed is searched  by operators >=, <=, =, >>, << according to apt rules. Operator must precede version (e.g. '>=1.0.1' or '>= 1.0.1'). If not, default is '='.")
+            help="Version of package to search for. Version filed is searched  by \
+                  operators >=, <=, =, >>, << according to apt rules. Operator must \
+                  precede version (e.g. '>=1.0.1' or '>= 1.0.1'). If not, default is '='.")
     parser_search.add_argument("-a", "--arch",
             help="Architecture of package to search for. Can be wildcard ('[^]?*' symbols)")
     #parser_search.add_argument("-R", help="Treat -n, -v, -a options as regexp.")
@@ -33,6 +36,7 @@ def config_subparser(subparsers_action_object):
 def search(args):
     aptly = Client(args.url)
     repo = getattr(args, "repo", None)
+    io = SerializedIO(input_f='stdin', output_f='stdout', output_f_fmt=args.fmt)
 
     # Make repo list 
     if repo is None:
@@ -57,25 +61,24 @@ def search(args):
     logger.debug("Query is %s" % query)
 
     # Search
-    result = {}
+    repo_list.sort()
+    result = dict()
     try:
-        if isinstance(query, str):
-            for r in repo_list:
+        for r in repo_list:
+            if isinstance(query, str):
                 search_result = aptly.repos.search_packages(r, query)
                 searched_list = [ s[0] for s in search_result ]
-                if len(searched_list) != 0:
-                    result[r] = searched_list
-        else:
-            for r in repo_list:
+            else:
                 searched_list = search_package_in_repo(aptly, r, **query)
-                if len(searched_list) != 0:
-                    result[r] = searched_list
+
+            if len(searched_list) != 0:
+                result[r] = sorted(searched_list, key=lambda key: AptlyKey(key))
     except AptlyAPIException as e:
         if e.status_code in [404, 400]:
             raise DidwwAptlyCtlError("Failed to search packages.", e, logger)
         else:
             raise
 
-    print(json.dumps(result))
+    io.print_output(result)
     return 0
 

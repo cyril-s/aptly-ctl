@@ -5,6 +5,7 @@ import requests.exceptions
 from didww_aptly_ctl.defaults import defaults
 from didww_aptly_ctl import app_logger
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
+from didww_aptly_ctl.utils.Version import system_ver_compare
 import didww_aptly_ctl.plugins
 
 def _init_logging(level):
@@ -36,10 +37,6 @@ def main():
     parser.add_argument("-L", "--log-level",
             choices=["debug", "info", "warn", "error", "critical"],
             default=defaults["global"]["log-level"])
-    parser.add_argument("-C", "--continue", dest="cont", action="store_true",
-            help="Continue if error occured.")
-    parser.add_argument("--dry-run", action="store_true",
-            help="Do not perform any action.")
     parser.add_argument("--fmt", choices=["yaml", "json"], default="yaml",
             help="Output format.")
 
@@ -58,6 +55,10 @@ def main():
         print(e)
         sys.exit(1)
     logger = logging.getLogger(__name__)
+
+    if not system_ver_compare:
+        logger.debug("Cannot import apt.apt_pkg module from python3-apt" \
+                + " package. Using python substitute that is much slower.")
 
     # run subcommand
     if not args.subcommand:

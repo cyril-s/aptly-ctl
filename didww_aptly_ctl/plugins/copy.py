@@ -7,13 +7,8 @@ from re import match
 from aptly_api import Client
 from aptly_api.base import AptlyAPIException
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils import (
-        aptly_key_regex,
-        direct_reference_regex,
-        aptly_key_to_direct_reference,
-        direct_reference_to_aptly_key,
-        publish_update,
-        )
+from didww_aptly_ctl.utils.misc import publish_update
+from didww_aptly_ctl.utils import AptlyKey
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +40,11 @@ def copy(args):
     #search package refs in source repo and get their keys (or validate if key supplied)
     dir_refs_to_validate = []
     for r in args.refs:
-        if match(aptly_key_regex, r):
-            dir_ref, __ = aptly_key_to_direct_reference(r)
+        if AptlyKey.key_regexp.match(r):
+            dir_ref = AptlyKey(r).getDirRef()
             logger.debug("Converting '{}' to '{}'".format(r, dir_ref))
             dir_refs_to_validate.append(dir_ref)
-        elif match(direct_reference_regex, r):
+        elif AptlyKey.dir_ref_regexp.match(r):
             dir_refs_to_validate.append(r)
         else:
             raise DidwwAptlyCtlError("Incorrect package reference: %s" % r, logger=logger)
@@ -103,5 +98,4 @@ def copy(args):
     logger.debug(update_result)
 
     return 0
-
 

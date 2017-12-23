@@ -4,7 +4,7 @@ import sys
 from aptly_api import Client
 from aptly_api.base import AptlyAPIException
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils import publish_update
+from didww_aptly_ctl.utils.misc import publish_update
 
 logger = logging.getLogger(__name__)
 
