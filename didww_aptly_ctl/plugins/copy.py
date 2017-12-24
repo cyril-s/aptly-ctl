@@ -47,7 +47,7 @@ def copy(args):
         elif AptlyKey.dir_ref_regexp.match(r):
             dir_refs_to_validate.append(r)
         else:
-            raise DidwwAptlyCtlError("Incorrect package reference: %s" % r, logger=logger)
+            raise DidwwAptlyCtlError("Incorrect package reference: %s" % r)
 
     keys = []
     for r in dir_refs_to_validate:
@@ -55,7 +55,7 @@ def copy(args):
             search_result = aptly.repos.search_packages(args.source, r)
         except AptlyAPIException as e:
             if e.status_code == 404:
-                raise DidwwAptlyCtlError("Failed to search for package by direct referece.", e, logger)
+                raise DidwwAptlyCtlError("Failed to search for package by direct referece.", e)
             else:
                 raise
         else:
@@ -63,16 +63,16 @@ def copy(args):
                 if args.keep_going:
                     logger.warn("Failed to find {} in repo {}".format(r, args.source))
                 else:
-                    raise DidwwAptlyCtlError("Failed to find {} package in repo {}".format(r, args.source), logger=logger)
+                    raise DidwwAptlyCtlError("Failed to find {} package in repo {}".format(r, args.source))
             elif len(search_result) == 1:
                 keys.append(search_result[0][0])
             else:
                 logger.warn("Skipping {}. Search by direct reference returned many results: {}".format(dir_ref, keys))
                 if not args.keep_going:
-                    raise DidwwAptlyCtlError("Failed to find {} package in repo {}".format(r, args.source), logger=logger)
+                    raise DidwwAptlyCtlError("Failed to find {} package in repo {}".format(r, args.source))
 
     if len(keys) == 0: 
-        raise DidwwAptlyCtlError("Could not find any package ref in source repo.", logger=logger)
+        raise DidwwAptlyCtlError("Could not find any package ref in source repo.")
 
     # Copy packages
     logger.info("Copying packages below from {} to {}".format(args.source, args.target))
@@ -84,7 +84,7 @@ def copy(args):
         add_result = aptly.repos.add_packages_by_key(args.target, *keys)
     except AptlyAPIException as e:
         if e.status_code in [404, 400]:
-            raise DidwwAptlyCtlError("Failed to copy packages.", e, logger)
+            raise DidwwAptlyCtlError("Failed to copy packages.", e)
         else:
             raise
 

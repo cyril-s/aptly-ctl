@@ -37,13 +37,13 @@ def remove(args):
             try:
                 remove_list = json.load(sys.stdin)
             except json.JSONDecodeError as e:
-                raise DidwwAptlyCtlError("Cannot load from stdin:", e, logger)
+                raise DidwwAptlyCtlError("Cannot load from stdin:", e)
         else:
             try:
                 with open(args.file, "r") as f:
                     remove_list = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError) as e:
-                raise DidwwAptlyCtlError("Cannot load from file -f:", e, logger)
+                raise DidwwAptlyCtlError("Cannot load from file -f:", e)
     elif args.refs:
         if not args.repo:
             raise DidwwAptlyCtlError("You have to specify --repo for -R option.")
@@ -67,7 +67,7 @@ def remove(args):
                 if args.cont and e.status_code == 404:
                     logger.error("Failed to delete packages: %s" % e)
                 elif not args.cont and e.status_code == 404:
-                    raise DidwwAptlyCtlError("Failed to delete packages.", e, logger)
+                    raise DidwwAptlyCtlError("Failed to delete packages.", e)
                 else:
                     raise
 

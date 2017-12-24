@@ -15,7 +15,10 @@ def _init_logging(level):
 
     app_logger.setLevel(numeric_level)
 
-    app_log_format = "%(levelname)s [%(name)s:%(funcName)s()] %(message)s"
+    if level.lower() == "debug":
+        app_log_format = "%(levelname)s [%(name)s:%(funcName)s()] %(message)s"
+    else:
+        app_log_format = "%(levelname)s %(message)s"
     app_formatter = logging.Formatter(fmt=app_log_format)
 
     app_handler = logging.StreamHandler()
@@ -27,18 +30,12 @@ def _init_logging(level):
 
 def main():
     # main parser
-    parser = argparse.ArgumentParser(
-            description="Aptly API client with convenient defaults and functions.")
-    parser.add_argument("-u", "--url", default=defaults["global"]["url"],
-            help="Aptly API endpoint url.")
-    parser.add_argument("--pass-file", metavar="<path>",
-            default=defaults["publish"]["passphraze_file"],
-            help="Path to gpg passphraze file local to aptly server.")
-    parser.add_argument("-L", "--log-level",
-            choices=["debug", "info", "warn", "error", "critical"],
-            default=defaults["global"]["log-level"])
-    parser.add_argument("--fmt", choices=["yaml", "json"], default="yaml",
-            help="Output format.")
+    parser = argparse.ArgumentParser(description="Aptly API client with convenient defaults and functions.")
+    parser.add_argument("-u", "--url", default=defaults["global"]["url"], help="Aptly API endpoint url")
+    parser.add_argument("--pass-file", metavar="<path>", default=defaults["publish"]["passphraze_file"],
+            help="Path to gpg passphraze file local to aptly server")
+    parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity")
+    parser.add_argument("--fmt", choices=["yaml", "json"], default="yaml", help="Output format")
 
     subparsers = parser.add_subparsers(dest="subcommand")
 
@@ -49,8 +46,15 @@ def main():
     args = parser.parse_args()
 
     # init logger
+    if args.verbose == 0:
+        log_level = "warn"
+    elif args.verbose == 1:
+        log_level = "info"
+    else:
+        log_level = "debug"
+
     try:
-        _init_logging(args.log_level)
+        _init_logging(log_level)
     except ValueError as e:
         print(e)
         sys.exit(1)
@@ -67,18 +71,9 @@ def main():
         logger.info("Running %s plugin." % args.subcommand)
         try:
             sys.exit(args.func(args))
-        except DidwwAptlyCtlError as e:
-            exc_logger = getattr(e, "logger", logger)
-            if args.log_level.upper() == "DEBUG":
-                exc_logger.exception(e.msg)
+        except (DidwwAptlyCtlError, requests.exceptions.ConnectionError) as e:
+            if log_level.lower() == "debug":
+                logger.exception(e.msg)
             else:
-                exc_logger.error(e.msg)
+                logger.error(e.msg)
             sys.exit(1)
-        except requests.exceptions.ConnectionError as e:
-            if args.log_level.upper() == "DEBUG":
-                logger.exception(e)
-            else:
-                logger.error(e)
-            sys.exit(1)
-
-

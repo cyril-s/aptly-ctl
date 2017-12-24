@@ -46,7 +46,7 @@ class SerializedIO:
             except yaml.YAMLError as e2:
                 logger.exception(e1)
                 logger.exception(e2)
-                raise DidwwAptlyCtlError("Cannot load from stdin", logger=logger)
+                raise DidwwAptlyCtlError("Cannot load from stdin")
 
 
     def _print_output(self, struct, f):

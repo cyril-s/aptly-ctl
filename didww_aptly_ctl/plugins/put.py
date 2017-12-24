@@ -53,7 +53,7 @@ def put(args):
     upload_result = aptly.files.upload(directory, *args.packages)
 
     if len(upload_result) == 0:
-        raise DidwwAptlyCtlError("Failed to upload any package.", logger=logger)
+        raise DidwwAptlyCtlError("Failed to upload any package.")
         
     # Add them to repo
     logger.info("Adding packages to repo.")
@@ -82,7 +82,7 @@ def put(args):
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")
-        raise DidwwAptlyCtlError("Nothing added or removed.", logger=logger)
+        raise DidwwAptlyCtlError("Nothing added or removed.")
 
     # Update publish
     update_result = publish_update(aptly, args.release, args.release, args.pass_file)
