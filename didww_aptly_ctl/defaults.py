@@ -3,6 +3,7 @@ defaults = {
             "url": "http://10.15.70.6:8090/api",
             },
         "publish": {
+            "gpg_key_name": "57D20558",
             "passphraze_file": "/home/pkg/gpg_pass",
             },
         "files": {
