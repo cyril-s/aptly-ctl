@@ -75,3 +75,28 @@ def search_package_in_repo(client, repo, name=None, version=None, architecture=N
     return [ s[0] for s in search_result ]
 
  
+def lookup_publish_by_repos(client, repos):
+    "Find which publishes depend on specified repos"
+    if not isinstance(repos, list):
+        raise ValueError("repos must be a list")
+    publish_list = client.publish.list()
+    publishes_from_local_repo = [ p for p in publish_list if p.source_kind == "local" ]
+    dependent_pubs = []
+    for p in publishes_from_local_repo:
+        for r in repos:
+            if r in [ source["Name"] for source in p.sources ]:
+                dependent_pubs.append(p)
+                break
+    return dependent_pubs
+
+
+def flatten_list(l):
+    "flattens list of lists of any depth"
+    flat_list = []
+    for item in l:
+        if isinstance(item, list):
+            flat_list.extend(flatten_list(item))
+        else:
+            flat_list.append(item)
+    return flat_list
+
