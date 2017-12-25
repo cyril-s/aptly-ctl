@@ -34,19 +34,28 @@ class SerializedIO:
 
     def get_input(self):
         """Get input for plugin. Automatically detects input format and return dict object"""
+        if self.input_f == '-':
+            logger.debug("Reading from stdin")
+            inp = sys.stdin.read()
+        else:
+            logger.debug("Reading from file {}".format(self.input_f))
+            with open(self.input_f, 'r') as f:
+                inp = f.read()
+
         try:
-            if self.input_f == '-':
-                inp = json.load(sys.stdin)
-            else:
-                with open(self.input_f, 'r') as f:
-                    inp = json.load(f)
+            data = json.loads(inp)
+            logger.debug("Input is serialized as json")
         except json.JSONDecodeError as e1:
+            logger.debug("Input is not serialized as json")
             try:
-                inp = yaml.load(sys.stdin)
+                data = yaml.load(inp)
+                logger.debug("Stdin is serialized as yaml")
             except yaml.YAMLError as e2:
                 logger.exception(e1)
                 logger.exception(e2)
-                raise DidwwAptlyCtlError("Cannot load from stdin")
+                raise DidwwAptlyCtlError("Cannot load from input")
+
+        return data
 
 
     def _print_output(self, struct, f):
