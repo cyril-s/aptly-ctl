@@ -2,7 +2,7 @@ from functools import total_ordering
 import logging
 logger = logging.getLogger(__name__)
 try:
-    import apt.apt_pkg
+    import apt
     system_ver_compare = True
 except ImportError:
     system_ver_compare = False
