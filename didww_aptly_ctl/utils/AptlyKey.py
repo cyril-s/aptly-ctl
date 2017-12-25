@@ -20,7 +20,7 @@ class AptlyKey:
         Returns None if cannot find. Raises DdidwwAptlyCtlError if obtaines multiple results.
         Uses aptly-api-client client.
         """
-        if not dir_ref_regexp.match(dir_ref):
+        if not AptlyKey.dir_ref_regexp.match(dir_ref):
             raise ValueError('Incorrect direct reference "%s"' % dir_ref)
     
         search_result = client.repos.search_packages(repo, dir_ref)
@@ -33,18 +33,21 @@ class AptlyKey:
             raise DidwwAptlyCtlError(
                 "Search by direct reference {} returned many results: {}".format(dir_ref, keys), logger=logger)
     
-        return AptlyKey(key)
+        return AptlyKey(key, repo)
 
 
-    def __init__(self, key):
+    def __init__(self, key, repo=None):
         m = AptlyKey.key_regexp.match(key)
         if not m or len(m.groups()) != 4:
             raise ValueError('Incorrect aptly key "%s"' % key)
 
+        self.key = key
         self.arch = m.group(1)
         self.name = m.group(2)
         self.version = Version(m.group(3))
         self.package_hash = m.group(4)
+        if repo is not None:
+            self.repo = repo
 
 
     def getDirRef(self):
@@ -52,10 +55,10 @@ class AptlyKey:
         Converts aptly key to direct reference 
         ("didww-billing_2.2.0~rc5_amd64").
         """
-        return "_".join([self.name, self.version, self.arch])
+        return "_".join([self.name, str(self.version), self.arch])
 
     def __repr__(self):
-        return "P" + " ".join([self.arch, self.name, str(self.version), self.package_hash]) 
+        return self.key
 
 
     def __str__(self):
@@ -73,3 +76,18 @@ class AptlyKey:
         t_other = (other.name, other.arch, other.version, other.package_hash)
         return t_self < t_other
 
+    def exists(self, client):
+        if not hasattr(self, "repo"):
+            raise ValueError("Method works only when 'repo' attribute is present")
+        return AptlyKey.fromDirRef(client, self.repo, self.getDirRef()) is not None
+
+    def repo_exists(self, client):
+        if not hasattr(self, repo):
+            raise ValueError("Method works only when 'repo' attribute is present")
+        try:
+            return client.repo.show(self.repo) is not None
+        except AptlyAPIException as e:
+            if e.status_code == 404:
+                return False
+            else:
+                raise
