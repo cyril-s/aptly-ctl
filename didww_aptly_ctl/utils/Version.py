@@ -4,7 +4,7 @@ logger = logging.getLogger(__name__)
 try:
     import apt.apt_pkg
     system_ver_compare = True
-except ModuleNotFoundError:
+except ImportError:
     system_ver_compare = False
 
 
