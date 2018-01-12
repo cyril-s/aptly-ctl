@@ -32,10 +32,11 @@ class Version:
             epoch = "0"
 
         # strip debian revision
-        upstream_version, _, revision = upstream_version_revision.partition("-")
+        upstream_version, _, revision = upstream_version_revision.rpartition("-")
 
         # special case: no debian revision need to be treated like -0
-        if revision == "":
+        if len(upstream_version) == 0:
+            upstream_version = revision
             revision = "0"
 
         # check syntax
