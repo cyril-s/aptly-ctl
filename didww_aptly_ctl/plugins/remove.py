@@ -60,22 +60,20 @@ def remove(args):
         for key in keys:
             logger.info(''.join(["    ", '"', key, '"']))
         logger.info("Removing packages above from %s" % repo)
-        if not args.dry_run:
-            try:
-                aptly.repos.delete_packages_by_key(repo, *keys)
-            except AptlyAPIException as e:
-                if args.cont and e.status_code == 404:
-                    logger.error("Failed to delete packages: %s" % e)
-                elif not args.cont and e.status_code == 404:
-                    raise DidwwAptlyCtlError("Failed to delete packages.", e)
-                else:
-                    raise
+        try:
+            aptly.repos.delete_packages_by_key(repo, *keys)
+        except AptlyAPIException as e:
+            if args.cont and e.status_code == 404:
+                logger.error("Failed to delete packages: %s" % e)
+            elif not args.cont and e.status_code == 404:
+                raise DidwwAptlyCtlError("Failed to delete packages.", e)
+            else:
+                raise
 
     # Update publish
     for pub in pubs_to_update:
-        if not args.dry_run:
-            update_result = publish_update(aptly, pub, pub, args.pass_file)
-            logger.debug(update_result)
+        update_result = publish_update(aptly, pub, pub, args.pass_file)
+        logger.debug(update_result)
         logger.info("Updated publish {0}/{0}".format(pub))
 
     return 0
