@@ -1,0 +1,15 @@
+Source: didww-aptly-ctl
+Section: admin
+Priority: extra
+Maintainer: Kirill Shestakov <kirill.sh@didww.com>
+Build-Depends: debhelper (>=9), dh-python, python3-all, python3-setuptools, python3-yaml, python3-pytest, git-buildpackage
+Standards-Version: 3.9.8
+Homepage: https://git.in.didww.com/admin-tools/didww-aptly-ctl
+X-Python3-Version: >= 3.2
+
+Package: didww-aptly-ctl
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}, ${python3:Depends}
+Suggests: python3-apt
+Description: Some scripts to automate work with Aptly API with convenient defaults.
