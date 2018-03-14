@@ -24,18 +24,19 @@ class Version:
                         + "Position {}, code porint '{:x}'.".format(i, ord(c)))
 
         # strip epoch
-        epoch, _, upstream_version_revision = version.partition(":")
+        epoch, sep, upstream_version_revision = version.partition(":")
 
         # special case: no epoch means 0 epoch
-        if upstream_version_revision == "":
+        if len(upstream_version_revision) == 0 and len(sep) == 0:
             upstream_version_revision = epoch
             epoch = "0"
 
         # strip debian revision
-        upstream_version, _, revision = upstream_version_revision.rpartition("-")
+        upstream_version, sep, revision = upstream_version_revision.rpartition("-")
 
-        # special case: no debian revision need to be treated like -0
-        if len(upstream_version) == 0:
+        # special case: no debian revision need to be treated like "-0"
+        # empty revision in something like "1.1-" will be handled in syntax check
+        if len(upstream_version) == 0 and len(sep) == 0:
             upstream_version = revision
             revision = "0"
 
@@ -51,6 +52,9 @@ class Version:
             if not c.isalnum() and c not in self.upstream_version_allowed_chars:
                 raise ValueError("Upsream version '{}' of version '{}'".format(upstream_version, version) \
                     + " contains illegal character (position {}, code point {:X}).".format(i, ord(c)))
+
+        if len(revision) == 0:
+            raise ValueError("Debian revision '{}' of version '{}' is empty.".format(revision, version))
 
         for i, c in enumerate(revision):
             if not c.isalnum() and c not in self.revision_allowed_chars:

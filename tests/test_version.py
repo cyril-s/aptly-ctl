@@ -20,6 +20,14 @@ class TestVersion(object):
         with pytest.raises(ValueError):
             v = Version("1:-1")
 
+    def test_version_constructor_err_on_empty_revision(self):
+        with pytest.raises(ValueError):
+            v = Version("1.1-")
+
+    def test_version_constructor_err_on_empty_epoch(self):
+        with pytest.raises(ValueError):
+            v = Version(":1.1")
+
     def test_version_constructor_err_on_upstream_version_starts_with_non_decimal(self):
         with pytest.raises(ValueError):
             v = Version("a1.0-1")
