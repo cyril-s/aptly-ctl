@@ -41,6 +41,7 @@ def _remove_upload_dir(client, directory):
 
 
 def put(args):
+    raise DidwwAptlyCtlError("This plugin does not work. Look for upatest of didww-aptly-ctl")
     repo = "_".join([args.release, args.component, args.dist])
     timestamp = datetime.utcnow().timestamp()
     directory = repo + "_" + str(int(timestamp))
