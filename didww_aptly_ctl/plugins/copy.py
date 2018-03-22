@@ -8,7 +8,6 @@ from aptly_api import Client
 from aptly_api.base import AptlyAPIException
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 from didww_aptly_ctl.utils.misc import lookup_publish_by_repos, flatten_list
-from didww_aptly_ctl.defaults import defaults
 from didww_aptly_ctl.utils import AptlyKey
 from didww_aptly_ctl.utils import SerializedIO
 
@@ -152,8 +151,8 @@ def copy(args):
             update_result = aptly.publish.update(
                     prefix = p.prefix,
                     distribution = p.distribution,
-                    sign_gpgkey = defaults["publish"]["gpg_key_name"],
-                    sign_passphrase_file = defaults["publish"]["passphraze_file"]
+                    sign_gpgkey = args.gpg_key_name,
+                    sign_passphrase_file = args.pass_file_path
                     )
             logger.debug(update_result)
         logger.info("Updated publish {}/{}".format(p.prefix, p.distribution))

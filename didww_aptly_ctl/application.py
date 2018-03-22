@@ -32,8 +32,14 @@ def main():
     # main parser
     parser = argparse.ArgumentParser(description="Aptly API client with convenient defaults and functions.")
     parser.add_argument("-u", "--url", default=defaults["global"]["url"], help="Aptly API endpoint url")
-    parser.add_argument("--pass-file", metavar="<path>", default=defaults["publish"]["passphraze_file"],
-            help="Path to gpg passphraze file local to aptly server")
+
+    help_msg="Path to gpg passphraze file local to aptly server"
+    parser.add_argument("--pass-file", metavar="<path>", dest="pass_file_path",
+            default=defaults["publish"]["passphraze_file"], help=help_msg)
+
+    help_msg="gpg key name (local to aptly server/user)"
+    parser.add_argument("--gpg-key", metavar="<name>", dest="gpg_key_name",
+            default=defaults["publish"]["gpg_key_name"], help=help_msg)
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity")
     parser.add_argument("--fmt", choices=["yaml", "json"], default="yaml", help="Output format")
 
