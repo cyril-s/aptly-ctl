@@ -4,77 +4,107 @@ import sys
 from aptly_api import Client
 from aptly_api.base import AptlyAPIException
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.misc import publish_update
+from didww_aptly_ctl.utils import SerializedIO
+from didww_aptly_ctl.utils.misc import lookup_publish_by_repos, flatten_list
+from didww_aptly_ctl.defaults import defaults
 
 logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
-    descr_msg = """
-    Remove packages from local repos.
-    """
-    parser_remove = subparsers_action_object.add_parser("remove",
-        description=descr_msg,
-        help="Removes packages from local repos.")
+    descr_msg = "Remove packages from local repos and update dependent publishes."
+    help_msg =  "Remove packages from local repos and update dependent publishes."
+    parser_remove = subparsers_action_object.add_parser("remove", description=descr_msg, help=help_msg)
     parser_remove.set_defaults(func=remove)
-    parser_remove.add_argument("-r", "--repo",
-            help="Repo name from where to remove packages.")
-    group = parser_remove.add_mutually_exclusive_group(required=True)
-    group.add_argument("-f", "--file",
-            help="""Read instructions from file (- for stdin).
-            Format is json dictionary of repo names as keys, and
-            aptly packages keys list as values.""")
-    group.add_argument("-R", "--refs", metavar="ref", nargs='+',
-            help="""Direct refereces to package or aptly keys.
-            E.g. didww-panel-api_3.16.2~rc1_amd64 or
-            "Pamd64 didww-panel-api 3.16.2~rc1 54ecb10fabbd98bf"
-            """)
+
+    help_msg = """
+    repo is a repo name from where to remove package, and package_reference is an
+    aplty key of a package (e.g. 'Pi386 libboost-program-options-dev 1.49.0.1 918d2f433384e378').
+    If '-' is supplied, reads a source refs list from stdin in a form of
+    a dictionary, where keys are repo names, and values are lists of aptly
+    keys (e.g. read output of search plugin)
+    """
+    parser_remove.add_argument("refs", metavar="repo/package_referece", nargs="+", help=help_msg)
+
+    help_msg = "Don no delete packages or update publish. Just validate actions and show what is to be done"
+    parser_remove.add_argument("--dry-run", action="store_true", help=help_msg)
 
 
 def remove(args):
     aptly = Client(args.url)
-    if args.file:
-        if args.file == "-":
-            try:
-                remove_list = json.load(sys.stdin)
-            except json.JSONDecodeError as e:
-                raise DidwwAptlyCtlError("Cannot load from stdin:", e)
-        else:
-            try:
-                with open(args.file, "r") as f:
-                    remove_list = json.load(f)
-            except (FileNotFoundError, json.JSONDecodeError) as e:
-                raise DidwwAptlyCtlError("Cannot load from file -f:", e)
-    elif args.refs:
-        if not args.repo:
-            raise DidwwAptlyCtlError("You have to specify --repo for -R option.")
-        else:
-            remove_list = {args.repo: args.refs}
+    io = SerializedIO(input_f='stdin', output_f='stdout', output_f_fmt=args.fmt)
 
-    if len(remove_list) == 0:
-        logger.warn("Nothing to remove.")
-        return 0
-
-    pubs_to_update = set()
-    for repo, keys in remove_list.items():
-        pubs_to_update.add(repo.split("_")[0])
-        for key in keys:
-            logger.info(''.join(["    ", '"', key, '"']))
-        logger.info("Removing packages above from %s" % repo)
-        try:
-            aptly.repos.delete_packages_by_key(repo, *keys)
-        except AptlyAPIException as e:
-            if args.cont and e.status_code == 404:
-                logger.error("Failed to delete packages: %s" % e)
-            elif not args.cont and e.status_code == 404:
-                raise DidwwAptlyCtlError("Failed to delete packages.", e)
+    # construct source refs dict
+    if len(args.refs) == 1 and args.refs[0] == "-":
+        logger.info("Getting source refs from stdin")
+        refs = io.get_input()
+    else:
+        refs = dict()
+        for r in args.refs:
+            repo, sep, ref = r.partition("/")
+            if len(sep) == 0:
+                raise DidwwAptlyCtlError("Incorrect reference name. '/' is absent: '%s'" % r)
+            elif len(sep) > 0 and len(repo) == 0:
+                raise DidwwAptlyCtlError("Incorrect reference name. repo is absent: '%s'" % r)
+            elif len(sep) > 0 and len(ref) == 0:
+                raise DidwwAptlyCtlError("Incorrect reference name. package_referece is absent: '%s'" % r)
             else:
-                raise
+                if repo not in refs:
+                    refs[repo] = []
+                refs[repo].append(ref)
 
-    # Update publish
-    for pub in pubs_to_update:
-        update_result = publish_update(aptly, pub, pub, args.pass_file)
-        logger.debug(update_result)
-        logger.info("Updated publish {0}/{0}".format(pub))
+    if not refs:
+        raise DidwwAptlyCtlError("No reference were supplied. Nothing to remove.")
 
-    return 0
+    # remove packages
+    failed_repos = []
+    for repo, keys in refs.items():
+        try:
+            delete_result = aptly.repos.delete_packages_by_key(repo, *keys)
+        except AptlyAPIException as e:
+            if args.verbose > 1:
+                logger.exception(e)
+            else:
+                logger.error(e)
+            failed_repos.append(repo)
+            for key in keys:
+                logger.error('Failed to remove "{}" from {}'.format(key, repo))
+        else:
+            for key in keys:
+                logger.info('Removed "{}" from {}'.format(key, repo))
+            logger.debug("API returned: " + str(delete_result))
+    else:
+        for f in failed_repos:
+            del refs[f] # no need to update publish sourced from this repo
+
+    if not refs:
+        raise DidwwAptlyCtlError("Failed to remove anything.")
+
+    # Update publishes
+    pubs = lookup_publish_by_repos(aptly, list(refs.keys()))
+    update_exceptions = []
+    for p in pubs:
+        logger.info('Updating publish with prefix "{}", dist "{}"'.format(p.prefix, p.distribution))
+        if not args.dry_run:
+            try:
+                update_result = aptly.publish.update(
+                    prefix = p.prefix,
+                    distribution = p.distribution,
+                    sign_gpgkey = args.gpg_key_name,
+                    sign_passphrase_file = args.pass_file_path 
+                    )
+            except AptlyAPIException as e:
+                logger.error('Can\'t update publish with prefix "{}", dist "{}".'.format(p.prefix,p.distribution))
+                update_exceptions.append(e)
+                if args.verbose > 1:
+                    logger.exception(e)
+                else:
+                    logger.error(e)
+            else:
+                logger.debug("API returned: " + str(update_result))
+                logger.info('Updated publish with prefix "{}", dist "{}".'.format(p.prefix, p.distribution))
+
+    if len(update_exceptions) > 0:
+        raise DidwwAptlyCtlError("Some publishes fail to update")
+    else:
+        return 0
 
