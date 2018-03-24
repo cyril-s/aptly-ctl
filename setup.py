@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 from setuptools import setup, find_packages
+from didww_aptly_ctl import __version__
 
 setup(
     name="didww-aptly-ctl",
-    version="0.3",
+    version=__version__,
     packages=find_packages(exclude=["tests"]),
     license="MIT",
     author="Kirill Shestakov",
