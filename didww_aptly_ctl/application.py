@@ -2,24 +2,22 @@ import argparse
 import logging
 import sys
 import requests.exceptions
-from didww_aptly_ctl.defaults import defaults
+from didww_aptly_ctl.defaults import defaults, VERBOSITY
 from didww_aptly_ctl import app_logger, __version__, __progName__
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 from didww_aptly_ctl.utils.Version import system_ver_compare
 import didww_aptly_ctl.plugins
 
 def _init_logging(level):
-    numeric_level = getattr(logging, level.upper(), None)
-    if not isinstance(numeric_level, int):
-        raise ValueError("Invalid log level: %s" % level)
-
+    numeric_level = getattr(logging, level, None)
     app_logger.setLevel(numeric_level)
 
-    if level.lower() == "debug":
-        app_log_format = "%(levelname)s [%(name)s:%(funcName)s()] %(message)s"
+    if level == VERBOSITY[2]:
+        app_formatter = logging.Formatter(
+                fmt="%(levelname)s [%(name)s:%(funcName)s()] %(message)s")
     else:
-        app_log_format = "%(levelname)s %(message)s"
-    app_formatter = logging.Formatter(fmt=app_log_format)
+        app_formatter = logging.Formatter(
+                fmt="%(levelname)s %(message)s")
 
     app_handler = logging.StreamHandler()
     app_handler.setLevel(numeric_level)
@@ -60,13 +58,11 @@ def main():
 
     args = parser.parse_args()
 
-    # init logger
-    if args.verbose == 0:
-        log_level = "warn"
-    elif args.verbose == 1:
-        log_level = "info"
-    else:
-        log_level = "debug"
+    # set up logging
+    try:
+        log_level = VERBOSITY[args.verbose]
+    except IndexError:
+        log_level = "DEBUG"
 
     try:
         _init_logging(log_level)
@@ -75,6 +71,7 @@ def main():
         sys.exit(1)
     logger = logging.getLogger(__name__)
 
+    # check version comparios from python3-apt module
     if not system_ver_compare:
         logger.debug("Cannot import apt.apt_pkg module from python3-apt" \
                 + " package. Using python substitute that is much slower.")
@@ -87,8 +84,6 @@ def main():
         try:
             sys.exit(args.func(args))
         except (DidwwAptlyCtlError, requests.exceptions.ConnectionError) as e:
-            if log_level.lower() == "debug":
-                logger.exception(e.msg)
-            else:
-                logger.error(e.msg)
+            logger.error(e)
+            logger.debug("", exc_info=True)
             sys.exit(1)

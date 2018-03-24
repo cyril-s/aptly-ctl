@@ -10,3 +10,6 @@ defaults = {
             "upload_timeout": 300,
             },
         }
+
+# map number of '-v' args to log level
+VERBOSITY = frozenset("WARN", "INFO", "DEBUG")
