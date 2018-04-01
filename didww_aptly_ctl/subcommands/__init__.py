@@ -1,4 +1,4 @@
-from didww_aptly_ctl.plugins import (
+from didww_aptly_ctl.subcommands import (
         put,
         search,
         copy,
