@@ -69,7 +69,7 @@ def main():
 
     # init config
     try:
-        cfg = Config(args.profile, args.config, args.cfg)
+        cfg = Config( args.cfg, args.profile, args.config)
     except DidwwAptlyCtlError as e:
         logger.error(e)
         logger.debug("", exc_info=True)
@@ -86,8 +86,9 @@ def main():
     else:
         logger.info("Running %s subcommand." % args.subcommand)
         try:
-            sys.exit(args.func(cfg))
+            sys.exit(args.func(cfg, args))
         except (DidwwAptlyCtlError, requests.exceptions.ConnectionError) as e:
             logger.error(e)
             logger.debug("", exc_info=True)
             sys.exit(128)
+

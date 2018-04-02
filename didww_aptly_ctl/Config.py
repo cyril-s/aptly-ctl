@@ -2,6 +2,7 @@ import logging
 import os
 import yaml
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
+from didww_aptly_ctl.utils.misc import nested_set
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class Config:
         if path:
             try_files.insert(0, path)
 
-        config = None
+        config = {}
         for i, p in enumerate(try_files):
             try:
                 with open(p, "r") as f:
@@ -53,11 +54,47 @@ class Config:
 
 
     def get_profile_cfg(self. cfg, profile):
-                
+        if "profile" not in cfg:
+            raise DidwwAptlyCtlError("Config file doesn't list any profiles.")
 
-    def __init__(self, profile, cfg_overrides, cfg_path):
-        config = default.copy()
-        cfg = self.load_config(cfg_path)
-        if cfg is not None:
-            config = self.get_profile_cfg(cfg, profile)
+        if profile.isdigit():
+            try:
+                profile_list = [ cfg["profiles"][int(profile)] ]
+            except IndexError:
+                raise DidwwAptlyCtlError("There is no profile numbered %s" % profile)
+        else:
+            profile_list = [ prof for prof in cfg["profiles"] if prof.get("name", "").startswith(profile) ]
+
+        if len(profile_list) == 0:
+            raise DidwwAptlyCtlError('Cannot find configuration profle "%s"' % profile)
+        elif len(profile_list) > 1:
+            raise DidwwAptlyCtlError('Profile "{}" equivocally matches {}'.format(profile, profile_list))
+        else:
+            return profile_list[0]
+
+    
+    def cmd_line_cfg(self, cfg_overrides):
+        result = dict()
+        for expr in cfg_overrides:
+            key, sep, val = expr.partition("=")
+            if len(sep) == 0 or len(key) == 0:
+                raise DidwwAptlyCtlError('Wrong configuration key: "%s"' % expr)
+            nested_set(result, key.split("."), val)
+        else:
+            return result
+
+
+    def __getitem__(self, key):
+        return self.conf[key]
+
+
+    def __init__(self, cfg_path, profile, cfg_overrides):
+        file_cfg = self.load_config(cfg_path)
+        profile_cfg = self.get_profile_cfg(file_cfg, profile)
+        cmd_line_cfg = self.parse_cmd_line_overrides(cfg_overrides)
+
+        self.config = {}
+        for d in [defaults, profile_cfg, cmd_line_cfg]:
+            self.config.update(d)
+
 

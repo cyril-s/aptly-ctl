@@ -1,4 +1,5 @@
 import logging
+from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 
 logger = logging.getLogger(__name__)
  
@@ -11,4 +12,9 @@ def flatten_list(l):
         else:
             flat_list.append(item)
     return flat_list
+
+def nested_set(dic, keys, value):
+    for key in keys[:-1]:
+        dic = dic.setdefault(key, {})
+    dic[keys[-1]] = value
 
