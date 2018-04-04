@@ -7,7 +7,7 @@ from didww_aptly_ctl.utils.misc import nested_set
 logger = logging.getLogger(__name__)
 
 # map number of '-v' args to log level
-VERBOSITY = frozenset("WARN", "INFO", "DEBUG")
+VERBOSITY = frozenset(["WARN", "INFO", "DEBUG"])
 
 class Config:
 
@@ -15,7 +15,7 @@ class Config:
             "url": None,
             "signing": {
                 "skip": False,
-                "batch" True,
+                "batch": True,
                 "gpg_key": None,
                 "keyring": None,
                 "secret_keyring": None,
@@ -24,17 +24,39 @@ class Config:
                 }
             }
 
-    def load_config(self, path):
-        try_files = ["/etc/aptly-ctl.conf"]
+    try_files = ["%s/.config/aplty-ctl.conf", "/etc/aptly-ctl.conf"]
+
+    def __init__(self, cfg_path=None, profile=0, cfg_overrides=[]):
+        file_cfg = self._load_config(cfg_path)
+        if file_cfg is None:
+            file_cfg = {}
+            profile_cfg = {}
+        else:
+            profile_cfg = self._get_profile_cfg(file_cfg, profile)
+
+        cmd_line_cfg = self._parse_cmd_line_overrides(cfg_overrides)
+
+        self._config = {}
+        for d in [self.defaults, profile_cfg, cmd_line_cfg]:
+            self._config.update(d)
+
+
+    def __getitem__(self, key):
+        return self._conf[key]
+
+
+    def _load_config(self, path=None):
+        try_files = self.try_files[:]
         try:
-            try_files.insert(0, "%s/.config/aplty-ctl.conf" % os.environ.get["HOME"])
+            try_files[0] % os.environ["HOME"]
         except KeyError:
             logger.debug("Can't get $HOME")
+            try_files.pop(0)
 
         if path:
             try_files.insert(0, path)
 
-        config = {}
+        config = None
         for i, p in enumerate(try_files):
             try:
                 with open(p, "r") as f:
@@ -43,8 +65,6 @@ class Config:
                 logger.debug('Can\'t load config from "%s"' % p)
                 if i == 0:
                     raise DidwwAptlyCtlError(e)
-                else:
-                    continue
             except yaml.YAMLError as e:
                 raise DidwwAptlyCtlError("Cannot parse config: ", e)
             else:
@@ -53,16 +73,14 @@ class Config:
         return config
 
 
-    def get_profile_cfg(self. cfg, profile):
-        if "profile" not in cfg:
-            raise DidwwAptlyCtlError("Config file doesn't list any profiles.")
-
-        if profile.isdigit():
-            try:
-                profile_list = [ cfg["profiles"][int(profile)] ]
-            except IndexError:
-                raise DidwwAptlyCtlError("There is no profile numbered %s" % profile)
-        else:
+    def _get_profile_cfg(self, cfg, profile):
+        try:
+            profile_list = [ cfg["profiles"][int(profile)] ]
+        except KeyError as e:
+            raise DidwwAptlyCtlError("Config file doesn't have %s key." % e)
+        except IndexError:
+            raise DidwwAptlyCtlError("There is no profile numbered %s" % profile)
+        except ValueError:
             profile_list = [ prof for prof in cfg["profiles"] if prof.get("name", "").startswith(profile) ]
 
         if len(profile_list) == 0:
@@ -73,7 +91,7 @@ class Config:
             return profile_list[0]
 
     
-    def cmd_line_cfg(self, cfg_overrides):
+    def _parse_cmd_line_overrides(self, cfg_overrides):
         result = dict()
         for expr in cfg_overrides:
             key, sep, val = expr.partition("=")
@@ -82,19 +100,4 @@ class Config:
             nested_set(result, key.split("."), val)
         else:
             return result
-
-
-    def __getitem__(self, key):
-        return self.conf[key]
-
-
-    def __init__(self, cfg_path, profile, cfg_overrides):
-        file_cfg = self.load_config(cfg_path)
-        profile_cfg = self.get_profile_cfg(file_cfg, profile)
-        cmd_line_cfg = self.parse_cmd_line_overrides(cfg_overrides)
-
-        self.config = {}
-        for d in [defaults, profile_cfg, cmd_line_cfg]:
-            self.config.update(d)
-
 

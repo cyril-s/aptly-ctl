@@ -30,11 +30,11 @@ class PackageRef:
 
         if key_regexp.match(ref):
             m = key_regexp.match(ref)
-            self.prefix = m.group(1)
+            self.prefix = "" if m.group(1) is None else m.group(1)
             self.arch = m.group(2)
             self.name = m.group(3)
             self.version = Version(m.group(4))
-            self.hash = m.group(5)
+            self.hash = "" if m.group(5) is None else m.group(5)
         elif dir_ref_regexp.match(ref):
             m = dir_ref_regexp.match(ref)
             self.name = m.group(1)
@@ -46,14 +46,7 @@ class PackageRef:
 
     @property
     def key(self):
-        if self.prefix:
-            p = self.prefix
-        else:
-            p = ""
-        if self.hash:
-            h = " " + self.hash
-        else:
-            h = ""
+        h = " " + self.hash if self.hash else ""
         return "{}P{} {} {}{}".format(p, self.arch, self.name, self.version, h)
 
 
@@ -63,10 +56,7 @@ class PackageRef:
 
 
     def __repr__(self):
-        if self.repo:
-            r = self.repo + "/"
-        else:
-            r = ""
+        r = self.repo + "/" if self.repo else ""
         return r + self.key
 
 
