@@ -83,7 +83,7 @@ def main():
         logger.info("Running %s subcommand." % args.subcommand)
         try:
             sys.exit(args.func(cfg, args))
-        except (DidwwAptlyCtlError, requests.exceptions.ConnectionError) as e:
+        except (DidwwAptlyCtlError, requests.exceptions.RequestException) as e:
             logger.error(e)
             logger.debug("", exc_info=True)
             sys.exit(128)

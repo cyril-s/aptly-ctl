@@ -1,96 +1,88 @@
-"""
-usage: didww-aptly-cli.py put [-h] [-U <seconds>] release component dist package [package ...]
-
-Uses aptly-api-client (https://github.com/gopythongo/aptly-api-client)
-Does 3 things:
-    * Upload packages to aptly server;
-    * Adds packages to specified repo;
-    * Updates correspoding publish.
-
-STDOUT: List of direct references of added packages
-"""
-
 import logging
 from datetime import datetime
-from aptly_api import Client
 from aptly_api.base import AptlyAPIException
+from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.misc import publish_update
+from didww_aptly_ctl.utils.PackageRef import PackageRef
 
 logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     parser_put = subparsers_action_object.add_parser("put",
-            description="Put packages in local repos.",
-            help="Put packages in local repos.")
+            description="Put packages in local repos and update dependent publishes.",
+            help="Put packages in local repos and update dependent publishes.")
+
     parser_put.set_defaults(func=put)
-    parser_put.add_argument("release", help="Release codename. E.g. jessie, stretch, etc.")
-    parser_put.add_argument("component", help="Component name: E.g. main, rs, billing etc.")
-    parser_put.add_argument("dist", help="Distribution component: E.g. stable, unstable etc.")
-    parser_put.add_argument("packages", metavar="package", nargs="+", help="Pakcage to upload.")
+    parser_put.add_argument("repo",
+        help="Destination repository name.")
+
+    parser_put.add_argument("packages", metavar="package", nargs="*",
+        help="Pakcages to upload. If omitted, file paths are read from stdin.")
+
+    parser_put.add_argument("-f", "--force-replace", action="store_true",
+        help="Remove packages conflicting with package being added.")
 
 
-def _remove_upload_dir(client, directory):
-    try:
-        client.files.delete(path=directory)
-    except Exception as e:
-        logger.error("Failed to remove upload directory %s" % directory)
-        raise
-    else:
-        logger.info("Remove upload directory %s" % directory)
-
-
-def put(args):
-    raise DidwwAptlyCtlError("This plugin does not work. Look for upatest of didww-aptly-ctl")
-    repo = "_".join([args.release, args.component, args.dist])
+def put(config, args):
     timestamp = datetime.utcnow().timestamp()
-    directory = repo + "_" + str(int(timestamp))
-    aptly = Client(args.url)
+    directory = "{}_{:.0f}".format(args.repo, timestamp)
+    aptly = ExtendedAptlyClient(config["url"])
 
-    # Upload packages
-    logger.info("Uploading the packages below to repo {} on {}".format(repo, args.url))
-    for p in args.packages:
-        logger.info("    " + p)
-    upload_result = aptly.files.upload(directory, *args.packages)
-
-    if len(upload_result) == 0:
-        raise DidwwAptlyCtlError("Failed to upload any package.")
-        
-    # Add them to repo
-    logger.info("Adding packages to repo.")
-    add_result = None
+    # don't try to upload files if repos does not exist
     try:
-        add_result = aptly.repos.add_uploaded_file(repo, directory)
+        aptly.repos.show(args.repo)
     except AptlyAPIException as e:
-        raise DidwwAptlyCtlError(
-                "Failed to add files to repo. API returned %s" % e.status_code,
-                original_exception=e,
-                logger=logger)
-    finally:
-        if add_result is None or len(add_result.failed_files) != 0:
-            _remove_upload_dir(aptly, directory)
+        if e.status_code == 404:
+            raise DidwwAptlyCtlError(e)
+        else:
+            raise
 
-    for failed in add_result.failed_files:
-        logger.warn("Failed to add %s to %s" % (failed, repo))
-    for warning in add_result.report["Warnings"]:
-        logger.warn(warning)
-    added_dir_refs = []
-    for added in add_result.report["Added"]:
-        logger.info("%s to %s" % (added, repo))
-        added_dir_refs.append(added.split(" ")[0])
-    for removed in add_result.report["Removed"]:
-        logger.info("Removed %s to %s" % (removed, repo))
+    logger.info('Uploading the packages to directory "%s"' % directory)
+    try:
+        upload_result = aptly.files.upload(directory, *args.packages)
+    except AptlyAPIException as e:
+        if e.status_code == 0 and r.args[0].startswith("File to upload"):
+            raise DidwwAptlyCtlError(e)
+        else:
+            raise
+    else:
+        logger.debug("Upload result: %s" % upload_result)
+
+    try:
+        add_result = aptly.repos.add_uploaded_file(args.repo, directory,
+                force_replace=args.force_replace)
+    finally:
+        aptly.files.delete(path=directory)
+    else:
+        logger.debug("Package add result: %s" % add_result)
+        for f in add_result.filed_files:
+            logger.warn('"Failed to add package "%s"' % f)
+        for f in add_result.report["Warnings"]:
+            logger.warn(f)
+        for f in add_result.report["Removed"]:
+            logger.info('Removed "%s"' % f)
+        for f in add_result.report["Added"]:
+            print(repr(PackageRef(f, args.repo)))
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")
         raise DidwwAptlyCtlError("Nothing added or removed.")
 
-    # Update publish
-    update_result = publish_update(aptly, args.release, args.release, args.pass_file)
-    logger.info("Updated publish {0}/{0}".format(args.release))
-    logger.debug(update_result)
-    print("\n".join(added_dir_refs))
-
+    pubs = aptly.lookup_publish_by_repos([args.repo])
+    for p in pubs:
+        update_result = aptly.publish.update(
+                prefix = p.prefix,
+                distribution = p.distribution,
+                sign_skip = config["signing"]["skip"],
+                sign_batch = config["signing"]["batch"],
+                sign_gpgkey = config["signing"]["gpg_key"],
+                sign_keyring = config["signing"]["keyring"],
+                sign_secret_keyring = config["signing"]["secret_keyringkeyring"],
+                sign_passphrase = config["signing"]["passphrase"],
+                sign_passphrase_file = config["signing"]["passphrase_file"],
+                )
+        logger.info("Updated publish {}/{}".format(p.prefix, p.distribution))
+        logger.debug('Update result for "{}/{}: {}"'.format(
+                p.prefix, p.distribution, update_result))
+        
     return 0
-
-
