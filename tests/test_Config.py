@@ -120,4 +120,40 @@ class TestConfig:
         cmd_overrides = ["url http://localhost:9090/api"]
         with pytest.raises(DidwwAptlyCtlError):
             c = dummyConfig._parse_cmd_line_overrides(cmd_overrides)
+
+
+    def test_cfg_no_url(self, dummyConfig):
+        wrong_cfg = self._goodConfig["profiles"][0].copy()
+        wrong_cfg["url"] = None
+        with pytest.raises(DidwwAptlyCtlError):
+            c = dummyConfig._check_config(wrong_cfg)
+
+
+    def test_cfg_no_gpg_key(self, dummyConfig):
+        wrong_cfg = self._goodConfig["profiles"][0].copy()
+        wrong_cfg["signing"]["skip"] = False
+        wrong_cfg["signing"]["gpg_key"] = None
+        with pytest.raises(DidwwAptlyCtlError):
+            c = dummyConfig._check_config(wrong_cfg)
+
+
+    def test_cfg_both_passphrase_passphrase_file(self, dummyConfig):
+        wrong_cfg = self._goodConfig["profiles"][0].copy()
+        wrong_cfg["signing"]["skip"] = False
+        wrong_cfg["signing"]["gpg_key"] = "123456789"
+        wrong_cfg["signing"]["passphrase"] = "some_passs"
+        wrong_cfg["signing"]["passphrase_file"] = "/etc/some/path"
+        with pytest.raises(DidwwAptlyCtlError):
+            c = dummyConfig._check_config(wrong_cfg)
+
+
+    def test_cfg_none_passphrase_passphrase_file(self, dummyConfig):
+        wrong_cfg = self._goodConfig["profiles"][0].copy()
+        wrong_cfg["signing"]["skip"] = False
+        wrong_cfg["signing"]["gpg_key"] = "123456789"
+        wrong_cfg["signing"]["passphrase"] = None
+        wrong_cfg["signing"]["passphrase_file"] = None
+        with pytest.raises(DidwwAptlyCtlError):
+            c = dummyConfig._check_config(wrong_cfg)
+
             

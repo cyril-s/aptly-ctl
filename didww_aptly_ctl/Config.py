@@ -40,9 +40,24 @@ class Config:
         for d in [self.defaults, profile_cfg, cmd_line_cfg]:
             self._config.update(d)
 
+        self._check_config(self._config)
+
 
     def __getitem__(self, key):
         return self._conf[key]
+
+
+    def _check_config(self, config):
+        if not config["url"]:
+            raise DidwwAptlyCtlError("Specify url of API to connect to.")
+        if not config["signing"]["skip"] and not config["signing"]["gpg_key"]:
+            raise DidwwAptlyCtlError("Specify signing.gpg_key. Do not rely on default key.")
+        if config["signing"]["passphrase"] is not None \
+            and config["signing"]["passphrase_file"] is not None:
+            raise DidwwAptlyCtlError("Specify either signing.passphrase or signing.passphrase_file.")
+        if  config["signing"]["passphrase"] is None \
+            and config["signing"]["passphrase_file"] is None:
+            raise DidwwAptlyCtlError("Specify either signing.passphrase or signing.passphrase_file.")
 
 
     def _load_config(self, path=None):
