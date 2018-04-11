@@ -55,11 +55,7 @@ def main():
     args = parser.parse_args()
 
     # set up logging
-    try:
-        log_level = VERBOSITY[args.verbose]
-    except IndexError:
-        log_level = "DEBUG"
-
+    log_level = VERBOSITY[min(args.verbose, len(VERBOSITY) - 1)]
     try:
         _init_logging(log_level)
     except ValueError as e:
@@ -69,7 +65,7 @@ def main():
 
     # init config
     try:
-        cfg = Config( args.cfg, args.profile, args.config)
+        cfg = Config(args.cfg, args.profile, args.config)
     except DidwwAptlyCtlError as e:
         logger.error(e)
         logger.debug("", exc_info=True)

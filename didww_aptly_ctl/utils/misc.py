@@ -1,6 +1,4 @@
 import logging
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-
 logger = logging.getLogger(__name__)
  
 def flatten_list(l):
