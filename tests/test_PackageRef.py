@@ -7,7 +7,7 @@ class TestPackageRef:
 
     def test_constructor_from_aptly_key(self):
         r = PackageRef("Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")
-        assert r.prefix is None
+        assert r.prefix == ""
         assert r.arch == "amd64"
         assert r.name == "aptly"
         assert r.version == Version("2.2.0~rc5")
@@ -16,7 +16,7 @@ class TestPackageRef:
 
     def test_constructor_from_aptly_key_with_prefix(self):
         r = PackageRef("prefPamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")
-        assert r.prefix is "pref"
+        assert r.prefix == "pref"
         assert r.arch == "amd64"
         assert r.name == "aptly"
         assert r.version == Version("2.2.0~rc5")
@@ -25,7 +25,7 @@ class TestPackageRef:
 
     def test_constructor_from_aptly_key_with_repo(self):
         r = PackageRef("jessie_unstable/Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")
-        assert r.prefix is None
+        assert r.prefix == ""
         assert r.arch == "amd64"
         assert r.name == "aptly"
         assert r.version == Version("2.2.0~rc5")
@@ -34,20 +34,20 @@ class TestPackageRef:
 
     def test_constructor_from_direct_ref(self):
         r = PackageRef("aptly_amd64_2.2.0~rc5")
-        assert r.prefix is None
+        assert r.prefix == ""
         assert r.arch == "amd64"
         assert r.name == "aptly"
         assert r.version == Version("2.2.0~rc5")
-        assert r.hash is None
+        assert r.hash == ""
         assert r.repo is None
 
     def test_constructor_from_direct_ref_with_repo(self):
         r = PackageRef("jessie_unstable/aptly_amd64_2.2.0~rc5")
-        assert r.prefix is None
+        assert r.prefix == ""
         assert r.arch == "amd64"
         assert r.name == "aptly"
         assert r.version == Version("2.2.0~rc5")
-        assert r.hash is None
+        assert r.hash == ""
         assert r.repo == "jessie_unstable"
 
     def test_constructor_fail_if_traling_leading_spaces(self):
@@ -70,37 +70,44 @@ class TestPackageRef:
     def test_cmp_name(self):
         A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")
-        assert A > B and B < A
+        assert A > B
+        assert B < A
 
     def test_cmp_architecture(self):
         A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("Pi386 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        assert A < B and B > A
+        assert A < B
+        assert B > A
 
     def test_cmp_version(self):
         A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("Pamd64 didww-billing 2.2.0~rc6 f2b7dc2061b9d95c")
-        assert A < B and B > A
+        assert A < B
+        assert B > A
 
     def test_cmp_hash(self):
         A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("Pamd64 didww-billing 2.2.0~rc5 x2b7dc2061b9d95c")
-        assert A < B and B > A
+        assert A < B
+        assert B > A
 
     def test_cmp_emplty_hash(self):
         A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("Pamd64 didww-billing 2.2.0~rc5")
-        assert A > B and B < A
+        assert A > B
+        assert B < A
 
     def test_cmp_prefix(self):
         A = PackageRef("prefixPamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("afixPamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        assert A > B and B < A
+        assert A > B
+        assert B < A
 
     def test_cmp_empty_prefix(self):
         A = PackageRef("prefixPamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        assert A > B and B < A
+        assert A > B
+        assert B < A
 
     def test_cmp_repo(self):
         A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c", "jessie_unstable")
@@ -111,8 +118,8 @@ class TestPackageRef:
         ordered_list = [
                 PackageRef("Pamd64 aptly 2.2.0~rc5"),
                 PackageRef("Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"),
-                PackageRef("prefixPamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"),
                 PackageRef("Pi386 aptly 2.2.0~rc6 f2b7dc2061b9d95c"),
+                PackageRef("prefixPamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"),
                 PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c"),
                 PackageRef("Pamd64 didww-billing 2.2.0~rc5 x2b7dc2061b9d95c"),
                 PackageRef("Pamd64 didww-billing 2.2.0~rc6 f2b7dc2061b9d95c"),
@@ -126,5 +133,6 @@ class TestPackageRef:
     def test_constructor_from_repr(self):
         A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c", "jessie_unstable")
         B = PackageRef(repr(A))
-        assert A == B and A.repo == B.repo
+        assert A == B
+        assert A.repo == B.repo
 

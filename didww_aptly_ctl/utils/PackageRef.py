@@ -19,7 +19,7 @@ class PackageRef:
     dir_ref_regexp = re.compile(r"(\S+)_(\w+)_(\S+)$")
 
     def __init__(self, reference, local_repo=None):
-        repo, sep, ref = reference.strip().partition("/")
+        repo, sep, ref = reference.partition("/")
         if len(sep) == 0:
             ref = repo
             self.repo = local_repo
@@ -28,18 +28,20 @@ class PackageRef:
         else:
             self.repo = local_repo
 
-        if key_regexp.match(ref):
-            m = key_regexp.match(ref)
+        if self.key_regexp.match(ref):
+            m = self.key_regexp.match(ref)
             self.prefix = "" if m.group(1) is None else m.group(1)
             self.arch = m.group(2)
             self.name = m.group(3)
             self.version = Version(m.group(4))
-            self.hash = "" if m.group(5) is None else m.group(5)
-        elif dir_ref_regexp.match(ref):
-            m = dir_ref_regexp.match(ref)
+            self.hash = "" if m.group(5) is None else m.group(5)[1:] # strip leading space
+        elif self.dir_ref_regexp.match(ref):
+            m = self.dir_ref_regexp.match(ref)
+            self.prefix = ""
             self.name = m.group(1)
             self.arch = m.group(2)
             self.version = Version(m.group(3))
+            self.hash = ""
         else:
             raise ValueError('Incorrect package reference "%s"' % reference)
 
@@ -47,7 +49,7 @@ class PackageRef:
     @property
     def key(self):
         h = " " + self.hash if self.hash else ""
-        return "{}P{} {} {}{}".format(p, self.arch, self.name, self.version, h)
+        return "{}P{} {} {}{}".format(self.prefix, self.arch, self.name, self.version, h)
 
 
     @property
@@ -66,13 +68,13 @@ class PackageRef:
 
     def __eq__(self, other):
         t_self = (self.name, self.prefix, self.arch, self.version, self.hash)
-        t_other = (other.name, self,prefix, other.arch, other.version, other.hash)
+        t_other = (other.name, other.prefix, other.arch, other.version, other.hash)
         return t_self == t_other
 
 
     def __lt__(self, other):
         t_self = (self.name, self.prefix, self.arch, self.version, self.hash)
-        t_other = (other.name, self.prefix, other.arch, other.version, other.hash)
+        t_other = (other.name, other.prefix, other.arch, other.version, other.hash)
         return t_self < t_other
 
 
