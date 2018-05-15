@@ -5,6 +5,7 @@ RUN apt-get update && apt-get -y install aptly bzip2 gnupg gpgv sudo
 RUN adduser --gecos "" --disabled-password aptly
 WORKDIR /home/aptly
 ADD --chown=aptly:aptly aptly-ctl-test.asc ./
+RUN echo "$GPG_PASS" | sudo -u aptly tee /home/aptly/gpg_pass
 RUN sudo -u aptly mkdir /home/aptly/.gnupg
 RUN echo "pinentry-mode loopback" | sudo -u aptly tee -a /home/aptly/.gnupg/gpg.conf
 RUN sudo -u aptly gpg --batch --passphrase "$GPG_PASS" --import aptly-ctl-test.asc
