@@ -46,23 +46,26 @@ def put(config, args):
         else:
             raise
     else:
-        logger.debug("Upload result: %s" % upload_result)
+        logger.debug("Upload result: %s" % ",".join(upload_result))
 
     try:
         add_result = aptly.repos.add_uploaded_file(args.repo, directory,
                 force_replace=args.force_replace)
     finally:
         aptly.files.delete(path=directory)
-    else:
-        logger.debug("Package add result: %s" % add_result)
-        for f in add_result.filed_files:
-            logger.warn('"Failed to add package "%s"' % f)
-        for f in add_result.report["Warnings"]:
-            logger.warn(f)
-        for f in add_result.report["Removed"]:
-            logger.info('Removed "%s"' % f)
-        for f in add_result.report["Added"]:
-            print(repr(PackageRef(f, args.repo)))
+
+    logger.debug("Package add failed files: %s" % add_result.failed_files)
+    for f in add_result.failed_files:
+        logger.warn('"Failed to add package "%s"' % f)
+    logger.debug("Package add warnings: %s" % add_result.report["Warnings"])
+    for f in add_result.report["Warnings"]:
+        logger.warn(f)
+    logger.debug("Package add 'Removed' section: %s" % add_result.report["Removed"])
+    for f in add_result.report["Removed"]:
+        logger.info('Removed "%s"' % f)
+    logger.debug("Package add 'Added' section: %s" % add_result.report["Added"])
+    for f in add_result.report["Added"]:
+        print(repr(PackageRef(f.split()[0], args.repo)))
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")
@@ -77,12 +80,12 @@ def put(config, args):
                 sign_batch = config["signing"]["batch"],
                 sign_gpgkey = config["signing"]["gpg_key"],
                 sign_keyring = config["signing"]["keyring"],
-                sign_secret_keyring = config["signing"]["secret_keyringkeyring"],
+                sign_secret_keyring = config["signing"]["secret_keyring"],
                 sign_passphrase = config["signing"]["passphrase"],
                 sign_passphrase_file = config["signing"]["passphrase_file"],
                 )
         logger.info("Updated publish {}/{}".format(p.prefix, p.distribution))
-        logger.debug('Update result for "{}/{}: {}"'.format(
+        logger.debug('Publish update result for "{}/{}: {}"'.format(
                 p.prefix, p.distribution, update_result))
         
     return 0
