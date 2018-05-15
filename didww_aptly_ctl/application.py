@@ -27,19 +27,18 @@ def _init_logging(level):
 
 
 def main():
-    # main parser
     parser = argparse.ArgumentParser(prog=__progName__,
             description="Convenient Aptly API client.")
 
     parser.add_argument("-p", "--profile", default="0",
             help="Profile from config file. Can be it's name or number. Default is first one.")
 
-    parser.add_argument("--cfg",
+    parser.add_argument("-c", "--config",
             help="Path to config file. Default is $HOME/.config/aptly-ctl.conf, "
                  "and then /etc/aptly-ctl.conf")
 
-    parser.add_argument("-c", "--config", action="append",
-            help="Override value in config for chosen profile.")
+    parser.add_argument("-C", "--config-keys", metavar="KEY", action="append", default=[],
+            help="Override key value in config for chosen profile.")
 
     parser.add_argument("-v", "--verbose", action="count", default=0,
             help="Increase verbosity")
@@ -65,7 +64,7 @@ def main():
 
     # init config
     try:
-        cfg = Config(args.cfg, args.profile, args.config)
+        config = Config(args.config, args.profile, args.config_keys)
     except DidwwAptlyCtlError as e:
         logger.error(e)
         logger.debug("", exc_info=True)
@@ -82,9 +81,8 @@ def main():
     else:
         logger.info("Running %s subcommand." % args.subcommand)
         try:
-            sys.exit(args.func(cfg, args))
+            sys.exit(args.func(config, args))
         except (DidwwAptlyCtlError, requests.exceptions.RequestException) as e:
             logger.error(e)
             logger.debug("", exc_info=True)
             sys.exit(128)
-
