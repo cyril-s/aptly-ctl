@@ -1,7 +1,7 @@
 import logging
 from aptly_api import Client
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.util.PackageRef import PackageRef
+from didww_aptly_ctl.utils.PackageRef import PackageRef
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 
 logger = logging.getLogger(__name__)
