@@ -16,7 +16,7 @@ class PackageRef:
     In reference with version <repo> takes presendence on repo argument.
     """
     key_regexp = re.compile(r"(\w+?)?P(\w+) (\S+) (\S+)( \w+)?$")
-    dir_ref_regexp = re.compile(r"(\S+)_(\w+)_(\S+)$")
+    dir_ref_regexp = re.compile(r"(\S+)_([a-zA-Z0-9.+-:~]+)_(\w+)$")
 
     def __init__(self, reference, local_repo=None):
         repo, sep, ref = reference.partition("/")
@@ -39,8 +39,8 @@ class PackageRef:
             m = self.dir_ref_regexp.match(ref)
             self.prefix = ""
             self.name = m.group(1)
-            self.arch = m.group(2)
-            self.version = Version(m.group(3))
+            self.version = Version(m.group(2))
+            self.arch = m.group(3)
             self.hash = ""
         else:
             raise ValueError('Incorrect package reference "%s"' % reference)
