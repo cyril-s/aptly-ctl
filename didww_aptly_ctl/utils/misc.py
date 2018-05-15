@@ -16,3 +16,14 @@ def nested_set(dic, keys, value):
         dic = dic.setdefault(key, {})
     dic[keys[-1]] = value
 
+def nested_update(src, dst):
+    for item in src:
+        if item in dst and isinstance(src[item], dict) and isinstance(dst[item], dict):
+            nested_update(src[item], dst[item])
+        elif item in dst:
+            src[item] = dst[item]
+        else:
+            pass
+    for item in dst:
+        if item not in src:
+            src[item] = dst[item]

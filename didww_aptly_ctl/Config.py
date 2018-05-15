@@ -2,12 +2,12 @@ import logging
 import os
 import yaml
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.misc import nested_set
+from didww_aptly_ctl.utils.misc import nested_set, nested_update
 
 logger = logging.getLogger(__name__)
 
 # map number of '-v' args to log level
-VERBOSITY = frozenset(["WARN", "INFO", "DEBUG"])
+VERBOSITY = ("WARN", "INFO", "DEBUG")
 
 class Config:
 
@@ -38,32 +38,33 @@ class Config:
 
         self._config = {}
         for d in [self.defaults, profile_cfg, cmd_line_cfg]:
-            self._config.update(d)
+            nested_update(self._config, d)
 
-        self._check_config(self._config)
+        logger.debug("Config before check: %s" % self._config)
+        self._check_config()
 
 
     def __getitem__(self, key):
-        return self._conf[key]
+        return self._config[key]
 
 
-    def _check_config(self, config):
-        if not config["url"]:
+    def _check_config(self):
+        if not self["url"]:
             raise DidwwAptlyCtlError("Specify url of API to connect to.")
-        if not config["signing"]["skip"] and not config["signing"]["gpg_key"]:
+        if not self["signing"]["skip"] and not self["signing"]["gpg_key"]:
             raise DidwwAptlyCtlError("Specify signing.gpg_key. Do not rely on default key.")
-        if config["signing"]["passphrase"] is not None \
-            and config["signing"]["passphrase_file"] is not None:
+        if self["signing"]["passphrase"] is not None \
+            and self["signing"]["passphrase_file"] is not None:
             raise DidwwAptlyCtlError("Specify either signing.passphrase or signing.passphrase_file.")
-        if  config["signing"]["passphrase"] is None \
-            and config["signing"]["passphrase_file"] is None:
+        if  self["signing"]["passphrase"] is None \
+            and self["signing"]["passphrase_file"] is None:
             raise DidwwAptlyCtlError("Specify either signing.passphrase or signing.passphrase_file.")
 
 
     def _load_config(self, path=None):
         try_files = self.try_files[:]
         try:
-            try_files[0] % os.environ["HOME"]
+            try_files[0] = try_files[0] % os.environ["HOME"]
         except KeyError:
             logger.debug("Can't get $HOME")
             try_files.pop(0)
@@ -78,7 +79,7 @@ class Config:
                     config = yaml.load(f)
             except FileNotFoundError as e:
                 logger.debug('Can\'t load config from "%s"' % p)
-                if i == 0:
+                if len(try_files) == 3 and i == 0:
                     raise DidwwAptlyCtlError(e)
             except yaml.YAMLError as e:
                 raise DidwwAptlyCtlError("Cannot parse config: ", e)
