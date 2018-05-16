@@ -5,13 +5,15 @@ RUN apt-get update && apt-get -y install aptly bzip2 gnupg gpgv sudo
 RUN adduser --gecos "" --disabled-password aptly
 WORKDIR /home/aptly
 ADD --chown=aptly:aptly aptly-ctl-test.asc ./
-RUN echo "$GPG_PASS" | sudo -u aptly tee /home/aptly/gpg_pass
-RUN sudo -u aptly mkdir /home/aptly/.gnupg
-RUN echo "pinentry-mode loopback" | sudo -u aptly tee -a /home/aptly/.gnupg/gpg.conf
-RUN sudo -u aptly gpg --batch --passphrase "$GPG_PASS" --import aptly-ctl-test.asc
-RUN echo "$GPG_KEY:6:" | sudo -u aptly gpg --batch --import-ownertrust
-RUN sudo -u aptly aptly repo create -component=main -distribution=stretch stretch_main
-RUN sudo -u aptly aptly repo create -component=extra -distribution=stretch stretch_extra
-RUN sudo -u aptly aptly publish repo -batch -gpg-key=$GPG_KEY -passphrase "$GPG_PASS" -architectures=amd64 stretch_main
+USER aptly
+RUN echo "$GPG_PASS" | tee /home/aptly/gpg_pass
+RUN mkdir /home/aptly/.gnupg && chmod 0700 /home/aptly/.gnupg
+RUN echo "pinentry-mode loopback" | tee -a /home/aptly/.gnupg/gpg.conf
+RUN gpg --batch --passphrase "$GPG_PASS" --import aptly-ctl-test.asc
+RUN echo "$GPG_KEY:6:" | gpg --batch --import-ownertrust
+RUN aptly repo create -component=main -distribution=stretch stretch_main
+RUN aptly repo create -component=extra -distribution=stretch stretch_extra
+RUN aptly publish repo -batch -gpg-key=$GPG_KEY -passphrase "$GPG_PASS" -architectures=amd64 stretch_main
 EXPOSE 8090
-CMD su - aptly -c "aptly api serve -listen=:8090"
+ENTRYPOINT ["/usr/bin/aptly", "api", "serve"]
+CMD ["-listen=:8090"]
