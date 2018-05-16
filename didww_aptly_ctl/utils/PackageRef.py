@@ -54,7 +54,7 @@ class PackageRef:
 
     @property
     def dir_ref(self):
-        return "{}_{}_{}".format(self.name, self.arch, self.version)
+        return "{}_{}_{}".format(self.name, self.version, self.arch)
 
 
     def __repr__(self):

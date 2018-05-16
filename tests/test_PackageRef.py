@@ -33,7 +33,7 @@ class TestPackageRef:
         assert r.repo == "jessie_unstable"
 
     def test_constructor_from_direct_ref(self):
-        r = PackageRef("aptly_amd64_2.2.0~rc5")
+        r = PackageRef("aptly_2.2.0~rc5_amd64")
         assert r.prefix == ""
         assert r.arch == "amd64"
         assert r.name == "aptly"
@@ -42,13 +42,17 @@ class TestPackageRef:
         assert r.repo is None
 
     def test_constructor_from_direct_ref_with_repo(self):
-        r = PackageRef("jessie_unstable/aptly_amd64_2.2.0~rc5")
+        r = PackageRef("jessie_unstable/aptly_2.2.0~rc5_amd64")
         assert r.prefix == ""
         assert r.arch == "amd64"
         assert r.name == "aptly"
         assert r.version == Version("2.2.0~rc5")
         assert r.hash == ""
         assert r.repo == "jessie_unstable"
+
+    def test_constructor_fail_if_wrong_order_in_dir_ref(self):
+        with pytest.raises(ValueError):
+            r = PackageRef("aptly_amd64_2.2.0~rc5")
 
     def test_constructor_fail_if_traling_leading_spaces(self):
         with pytest.raises(ValueError):
