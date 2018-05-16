@@ -31,7 +31,7 @@ def main():
             description="Convenient Aptly API client.")
 
     parser.add_argument("-p", "--profile", default="0",
-            help="Profile from config file. Can be it's name or number. Default is first one.")
+            help="Profile from config file. Can be it's name or number. Default is the first one.")
 
     parser.add_argument("-c", "--config",
             help="Path to config file. Default is $HOME/.config/aptly-ctl.conf, "

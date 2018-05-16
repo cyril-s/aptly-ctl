@@ -65,7 +65,7 @@ def put(config, args):
         logger.info('Removed "%s"' % f)
     logger.debug("Package add 'Added' section: %s" % add_result.report["Added"])
     for f in add_result.report["Added"]:
-        print(repr(PackageRef(f.split()[0], args.repo)))
+        print('"' + repr(PackageRef(f.split()[0], args.repo)) + '"')
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")

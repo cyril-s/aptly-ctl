@@ -48,6 +48,7 @@ def search(config, args):
                 logger.debug("For query '{}' in repo '{}' api returned: {}".format(q, r, search_result))
                 searched_list.sort(key=lambda key: PackageRef(key))
                 for s in searched_list:
+                    # print quotes too for convenient copy-pasting in terminal
                     print('"{}/{}"'.format(r, s))
     except AptlyAPIException as e:
         if e.status_code in [404, 400]:
