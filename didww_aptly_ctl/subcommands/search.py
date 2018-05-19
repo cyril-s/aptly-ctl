@@ -1,5 +1,4 @@
 import logging
-import json
 from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
 from aptly_api.base import AptlyAPIException
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
