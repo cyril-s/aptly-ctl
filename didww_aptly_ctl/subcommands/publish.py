@@ -25,6 +25,23 @@ def config_subparser(subparsers_action_object):
     action_group.add_argument("-d", "--drop", metavar="publish",
             help="Drop published repository.")
 
+    parser_publish.add_argument("--detail", action="store_true",
+            help="Print additional details when showing and listing.")
+
+
+def pprint_publish(pub):
+    print("{}/{}".format(pub.prefix, pub.distribution))
+    print("    Source kind: " + pub.source_kind)
+    print("    Prefix: " + pub.prefix)
+    print("    Distribution: " + pub.distribution)
+    print("    Storage: " + pub.storage)
+    print("    Label: " + pub.label)
+    print("    Origin: " + pub.origin)
+    print("    Architectures: " + ", ".join(pub.architectures))
+    print("    Sources:")
+    for s in pub.sources:
+        print(" "*8 + "{} ({})".format(s["Name"], s["Component"]))
+
 
 def publish(config, args):
     aptly = ExtendedAptlyClient(config["url"])
@@ -33,7 +50,10 @@ def publish(config, args):
         publish_list = aptly.publish.list()
         publish_list.sort(key=lambda k: k.prefix + k.distribution)
         for p in publish_list:
-            pprint(p)
+            if args.detail:
+                pprint_publish(p)
+            else:
+                print("{}/{}".format(p.prefix, p.distribution))
     else:
         raise DidwwAptlyCtlError(NotImplementedError("Command not yet implemented"))
 

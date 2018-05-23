@@ -3,6 +3,7 @@ from pprint import pprint
 from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 from aptly_api.base import AptlyAPIException
+from didww_aptly_ctl.utils.PackageRef import PackageRef
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,18 @@ def config_subparser(subparsers_action_object):
             help="Print additional details when showing and listing.")
 
 
+def pprint_repo(repo, packages=[]):
+    print(repo.name)
+    print("    Default distribution: " + repo.default_distribution)
+    print("    Default component: " + repo.default_component)
+    print("    Comment: " + repo.comment)
+    if packages:
+        print("    Packages:")
+        packages.sort(key=lambda p: PackageRef(p.key))
+        for p in packages:
+            print(" "*8 + '"%s"' % p.key)
+
+
 def repo(config, args):
     aptly = ExtendedAptlyClient(config["url"])
 
@@ -40,7 +53,7 @@ def repo(config, args):
         repo_list.sort(key=lambda k: k.name)
         for r in repo_list:
             if args.detail:
-                pprint(r)
+                pprint_repo(r)
             else:
                 print(r.name)
     elif args.show:
@@ -51,8 +64,11 @@ def repo(config, args):
                 raise DidwwAptlyCtlError(e)
             else:
                 raise
+        if args.detail:
+            search_result = aptly.repos.search_packages(args.show)
+            pprint_repo(show_result, search_result)
         else:
-            pprint(show_result)
+            pprint_repo(show_result)
     else:
         raise DidwwAptlyCtlError(NotImplementedError("Command not yet implemented"))
 
