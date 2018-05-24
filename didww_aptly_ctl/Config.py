@@ -24,7 +24,7 @@ class Config:
                 }
             }
 
-    try_files = ["%s/.config/aplty-ctl.conf", "/etc/aptly-ctl.conf"]
+    try_files = ["%s/.config/aptly-ctl.conf", "/etc/aptly-ctl.conf"]
 
     def __init__(self, cfg_path=None, profile=0, cfg_overrides=[]):
         file_cfg = self._load_config(cfg_path)
