@@ -55,11 +55,11 @@ class TestConfig:
 
     def test_loading_nonexistent_config(self, tmpdir, dummyConfig):
         with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._load_config(tmpdir.join("aptly-ctl.conf"))
+            c = dummyConfig._load_config([tmpdir.join("aptly-ctl.conf")])
 
 
     def test_loading_existent_config(self, goodConfig, dummyConfig):
-        c = dummyConfig._load_config(goodConfig)
+        c = dummyConfig._load_config([goodConfig])
         assert c is not None
         assert len(c) > 0
 
@@ -125,16 +125,18 @@ class TestConfig:
     def test_cfg_no_url(self, dummyConfig):
         wrong_cfg = self._goodConfig["profiles"][0].copy()
         wrong_cfg["url"] = None
+        dummyConfig._config = wrong_cfg
         with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config(wrong_cfg)
+            c = dummyConfig._check_config()
 
 
     def test_cfg_no_gpg_key(self, dummyConfig):
         wrong_cfg = self._goodConfig["profiles"][0].copy()
         wrong_cfg["signing"]["skip"] = False
         wrong_cfg["signing"]["gpg_key"] = None
+        dummyConfig._config = wrong_cfg
         with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config(wrong_cfg)
+            c = dummyConfig._check_config()
 
 
     def test_cfg_both_passphrase_passphrase_file(self, dummyConfig):
@@ -143,8 +145,9 @@ class TestConfig:
         wrong_cfg["signing"]["gpg_key"] = "123456789"
         wrong_cfg["signing"]["passphrase"] = "some_passs"
         wrong_cfg["signing"]["passphrase_file"] = "/etc/some/path"
+        dummyConfig._config = wrong_cfg
         with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config(wrong_cfg)
+            c = dummyConfig._check_config()
 
 
     def test_cfg_none_passphrase_passphrase_file(self, dummyConfig):
@@ -153,7 +156,7 @@ class TestConfig:
         wrong_cfg["signing"]["gpg_key"] = "123456789"
         wrong_cfg["signing"]["passphrase"] = None
         wrong_cfg["signing"]["passphrase_file"] = None
+        dummyConfig._config = wrong_cfg
         with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config(wrong_cfg)
-
+            c = dummyConfig._check_config()
             

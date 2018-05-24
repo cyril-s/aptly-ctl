@@ -24,11 +24,38 @@ class Config:
                 }
             }
 
-    try_files = ["%s/.config/aptly-ctl.conf", "/etc/aptly-ctl.conf"]
+    try_files_home = [
+        "{home}/aptly-ctl.yml",
+        "{home}/aptly-ctl.yaml",
+        "{home}/aptly-ctl.conf",
+        "{home}/.aptly-ctl.yml",
+        "{home}/.aptly-ctl.yaml",
+        "{home}/.aptly-ctl.conf",
+        "{home}/.config/aptly-ctl.yml",
+        "{home}/.config/aptly-ctl.yaml",
+        "{home}/.config/aptly-ctl.conf",
+        ]
+
+    try_files_system = [
+        "/etc/aptly-ctl.conf",
+        ]
 
     def __init__(self, cfg_path=None, profile=0, cfg_overrides=[]):
-        file_cfg = self._load_config(cfg_path)
-        if file_cfg is None:
+        if cfg_path is None:
+            if "HOME" in os.environ:
+                for i in range(len(self.try_files_home)):
+                    self.try_files_home[i] = self.try_files_home[i].format(home=os.environ["HOME"])
+            else:
+                logger.warn("Could not get $HOME.")
+                self.try_files_home = []
+            try_files = self.try_files_home + self.try_files_system
+        else:
+            try_files = [cfg_path]
+
+        try:
+            file_cfg = self._load_config(try_files)
+        except DidwwAptlyCtlError as e:
+            logger.warn("Could not get config from these files: " + ", ".join(try_files))
             file_cfg = {}
             profile_cfg = {}
         else:
@@ -61,32 +88,20 @@ class Config:
             raise DidwwAptlyCtlError("Specify either signing.passphrase or signing.passphrase_file.")
 
 
-    def _load_config(self, path=None):
-        try_files = self.try_files[:]
-        try:
-            try_files[0] = try_files[0] % os.environ["HOME"]
-        except KeyError:
-            logger.debug("Can't get $HOME")
-            try_files.pop(0)
-
-        if path:
-            try_files.insert(0, path)
-
-        config = None
-        for i, p in enumerate(try_files):
+    def _load_config(self, files):
+        "Try to load config from the first existing file and throw DidwwAptlyCtlError if options are exausted"
+        for file in files:
             try:
-                with open(p, "r") as f:
-                    config = yaml.load(f)
+                with open(file, "r") as f:
+                    c = yaml.load(f)
+                    logger.info('Loadded config from "%s"' % file)
+                    return c
             except FileNotFoundError as e:
-                logger.debug('Can\'t load config from "%s"' % p)
-                if len(try_files) == 3 and i == 0:
-                    raise DidwwAptlyCtlError(e)
+                logger.debug('Can\'t load config from "%s"' % file)
             except yaml.YAMLError as e:
                 raise DidwwAptlyCtlError("Cannot parse config: ", e)
-            else:
-                break
-
-        return config
+        else:
+            raise DidwwAptlyCtlError("Could not find config file.")
 
 
     def _get_profile_cfg(self, cfg, profile):
