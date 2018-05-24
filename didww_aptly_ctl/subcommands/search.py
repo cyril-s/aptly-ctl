@@ -24,6 +24,12 @@ def config_subparser(subparsers_action_object):
     #parser_search.add_argument("--pretty", action="store_true",
     #        help="Print more readable rather than parsable output.")
 
+    parser_search.add_argument("--with-deps", action="store_true",
+            help="Include dependencies (that are in the same repo)  when evaluating package query.")
+
+    parser_search.add_argument("--details", action="store_true",
+            help="Return full information about each package (might be slow on large repos).")
+
 
 def search(config, args):
     aptly = ExtendedAptlyClient(config["url"])
@@ -35,24 +41,20 @@ def search(config, args):
         repo_list = [ r[0] for r in search_result ]
         if len(repo_list) == 0:
             raise DidwwAptlyCtlError("Seems aptly doesn't have any local repos.")
-    logger.info("Searching in repos {}".format(", ".join(repo_list)))
     repo_list.sort()
+    logger.info("Searching in repos {}".format(", ".join(repo_list)))
 
-    try:
-        for q in args.queries:
-            logger.debug("Query: " + q)
-            for r in repo_list:
-                search_result = aptly.repos.search_packages(r, q)
-                searched_list = [ s.key for s in search_result ]
-                logger.debug("For query '{}' in repo '{}' api returned: {}".format(q, r, search_result))
-                searched_list.sort(key=lambda key: PackageRef(key))
-                for s in searched_list:
-                    # print quotes too for convenient copy-pasting in terminal
-                    print('"{}/{}"'.format(r, s))
-    except AptlyAPIException as e:
-        if e.status_code in [404, 400]:
-            raise DidwwAptlyCtlError("Failed to search packages.", e)
-        else:
-            raise
+    for q in args.queries:
+        logger.debug("Query: " + q)
+        for r in repo_list:
+            search_result = aptly.repos.search_packages(r, q, args.with_deps, args.details)
+            logger.debug("For query '{}' in repo '{}' api returned: {}".format(q, r, search_result))
+            search_result.sort(key=lambda s: PackageRef(s.key))
+            for s in search_result:
+                # print quotes too for convenient copy-pasting in terminal
+                print('"{}/{}"'.format(r, s.key))
+                if args.details:
+                    for k, v in s.fields.items():
+                        print(" "*4 + "{}: {}".format(k, v))
 
     return 0
