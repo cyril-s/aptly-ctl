@@ -84,7 +84,7 @@ def main():
         try:
             sys.exit(args.func(config, args))
         except AptlyAPIException as e:
-            if e.status_code == 404 and "not found" in e.args[0].lower():
+            if e.status_code == 404 and "page not found" in e.args[0].lower():
                 logger.error("API reponded with '%s'. Check configured API url and run command with -vv to see failed request details." % e.args[0])
                 logger.debug("", exc_info=True)
                 sys.exit(128)
