@@ -46,7 +46,7 @@ def remove(config, args):
     failed_repos = []
     for repo, refs in all_refs.items():
         try:
-            delete_result = aptly.repos.delete_packages_by_key(repo, [r.key for r in refs])
+            delete_result = aptly.repos.delete_packages_by_key(repo, *[r.key for r in refs])
         except AptlyAPIException as e:
             logger.error(e)
             logger.debug("", exc_info=True)
