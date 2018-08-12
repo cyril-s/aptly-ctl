@@ -64,34 +64,7 @@ def remove(config, args):
     if not all_refs:
         raise DidwwAptlyCtlError("Failed to remove anything.")
 
-    pubs = aptly.lookup_publish_by_repos(list(all_refs.keys()))
-    update_exceptions = []
-    for p in pubs:
-        logger.info('Updating publish with prefix "{}", dist "{}"'.format(p.prefix, p.distribution))
-        if not args.dry_run:
-            try:
-                update_result = aptly.publish.update(
-                        prefix = p.prefix,
-                        distribution = p.distribution,
-                        sign_skip = config["signing"]["skip"],
-                        sign_batch = config["signing"]["batch"],
-                        sign_gpgkey = config["signing"]["gpg_key"],
-                        sign_keyring = config["signing"]["keyring"],
-                        sign_secret_keyring = config["signing"]["secret_keyring"],
-                        sign_passphrase = config["signing"]["passphrase"],
-                        sign_passphrase_file = config["signing"]["passphrase_file"],
-                        )
-            except AptlyAPIException as e:
-                logger.error('Can\'t update publish with prefix "{}", dist "{}".'.format(p.prefix,p.distribution))
-                update_exceptions.append(e)
-                if args.verbose > 1:
-                    logger.exception(e)
-                else:
-                    logger.error(e)
-            else:
-                logger.debug("API returned: " + str(update_result))
-                logger.info('Updated publish with prefix "{}", dist "{}".'.format(p.prefix, p.distribution))
-
+    update_exceptions = aptly.update_dependent_publishes(all_refs.keys(), config, args.dry_run)
     if len(update_exceptions) > 0:
         raise DidwwAptlyCtlError("Some publishes fail to update")
     else:

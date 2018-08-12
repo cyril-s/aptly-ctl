@@ -11,17 +11,17 @@ class ExtendedAptlyClient(Client):
     def lookup_publish_by_repos(self, repos):
         "Find what publishes depend on specified repos"
         publish_list = self.publish.list()
-        publishes_from_local_repo = [ p for p in publish_list if p.source_kind == "local" ]
+        publishes_from_local_repo = ( p for p in publish_list if p.source_kind == "local" )
         dependent_pubs = []
 
         try:
-            repos_names = [ repo.name for repo in repos ]
+            repos_names = ( repo.name for repo in repos )
         except AttributeError:
             repos_names = repos
 
         for p in publishes_from_local_repo:
             for r in repos_names:
-                if r in [ source["Name"] for source in p.sources ]:
+                if r in ( source["Name"] for source in p.sources ):
                     dependent_pubs.append(p)
                     break
         else:
@@ -48,3 +48,31 @@ class ExtendedAptlyClient(Client):
         else:
             return result
 
+    def update_dependent_publishes(repos, config, dry_run=False):
+        pubs = self.lookup_publish_by_repos(repos)
+        update_exceptions = []
+        for p in pubs:
+            logger.info('Updating publish with prefix "{}", dist "{}"'.format(p.prefix, p.distribution))
+            if dry_run:
+                continue
+            try:
+                update_result = self.publish.update(
+                        prefix = p.prefix,
+                        distribution = p.distribution,
+                        sign_skip = config["signing"]["skip"],
+                        sign_batch = config["signing"]["batch"],
+                        sign_gpgkey = config["signing"]["gpg_key"],
+                        sign_keyring = config["signing"]["keyring"],
+                        sign_secret_keyring = config["signing"]["secret_keyring"],
+                        sign_passphrase = config["signing"]["passphrase"],
+                        sign_passphrase_file = config["signing"]["passphrase_file"],
+                        )
+            except AptlyAPIException as e:
+                logger.error('Can\'t update publish with prefix "{}", dist "{}".'.format(p.prefix,p.distribution))
+                update_exceptions.append(e)
+                logger.error(e)
+                logger.debug("", exc_info=True)
+            else:
+                logger.debug("API returned: " + str(update_result))
+                logger.info('Updated publish with prefix "{}", dist "{}".'.format(p.prefix, p.distribution))
+        return update_exceptions

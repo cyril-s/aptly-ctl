@@ -71,21 +71,8 @@ def put(config, args):
         logger.warn("Skipping publish update.")
         raise DidwwAptlyCtlError("Nothing added or removed.")
 
-    pubs = aptly.lookup_publish_by_repos([args.repo])
-    for p in pubs:
-        update_result = aptly.publish.update(
-                prefix = p.prefix,
-                distribution = p.distribution,
-                sign_skip = config["signing"]["skip"],
-                sign_batch = config["signing"]["batch"],
-                sign_gpgkey = config["signing"]["gpg_key"],
-                sign_keyring = config["signing"]["keyring"],
-                sign_secret_keyring = config["signing"]["secret_keyring"],
-                sign_passphrase = config["signing"]["passphrase"],
-                sign_passphrase_file = config["signing"]["passphrase_file"],
-                )
-        logger.info("Updated publish {}/{}".format(p.prefix, p.distribution))
-        logger.debug('Publish update result for "{}/{}: {}"'.format(
-                p.prefix, p.distribution, update_result))
-        
-    return 0
+    update_exceptions = aptly.update_dependent_publishes([args.repo], config)
+    if len(update_exceptions) > 0:
+        raise DidwwAptlyCtlError("Some publishes fail to update")
+    else:
+        return 0
