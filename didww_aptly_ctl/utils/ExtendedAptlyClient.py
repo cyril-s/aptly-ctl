@@ -15,7 +15,7 @@ class ExtendedAptlyClient(Client):
         dependent_pubs = []
 
         try:
-            repos_names = ( repo.name for repo in repos )
+            repos_names = [ repo.name for repo in repos ]
         except AttributeError:
             repos_names = repos
 
@@ -48,7 +48,7 @@ class ExtendedAptlyClient(Client):
         else:
             return result
 
-    def update_dependent_publishes(repos, config, dry_run=False):
+    def update_dependent_publishes(self, repos, config, dry_run=False):
         pubs = self.lookup_publish_by_repos(repos)
         update_exceptions = []
         for p in pubs:
