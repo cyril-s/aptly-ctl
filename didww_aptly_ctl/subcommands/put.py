@@ -52,6 +52,7 @@ def put(config, args):
         add_result = aptly.repos.add_uploaded_file(args.repo, directory,
                 force_replace=args.force_replace)
     finally:
+        logger.info("Deleting directory '%s'." % directory)
         aptly.files.delete(path=directory)
 
     logger.debug("Package add failed files: %s" % add_result.failed_files)
