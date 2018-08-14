@@ -53,6 +53,7 @@ def remove(config, args):
             failed_repos.append(repo)
             for r in refs:
                 logger.error('Failed to remove "{}" from {}'.format(r, repo))
+                print('"' + repr(r) + '"')
         else:
             for r in refs:
                 logger.info('Removed "{}" from {}'.format(r, repo))
