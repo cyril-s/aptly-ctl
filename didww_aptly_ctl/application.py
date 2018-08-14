@@ -9,12 +9,12 @@ from didww_aptly_ctl.Config import Config, VERBOSITY
 from aptly_api.base import AptlyAPIException
 import didww_aptly_ctl.subcommands
 
-def _init_logging(level):
+def _init_logging(level, subcommand):
     numeric_level = getattr(logging, level, None)
     if level == VERBOSITY[2]:
-        log_fmt = "%(levelname)s [%(name)s:%(funcName)s()] %(message)s"
+        log_fmt = "%(levelname)s {}(%(process)d) [%(name)s:%(funcName)s()] %(message)s".format(subcommand)
     else:
-        log_fmt = "%(levelname)s %(message)s"
+        log_fmt = "%(levelname)s {}(%(process)d) %(message)s".format(subcommand)
     app_logger.setLevel(numeric_level)
     app_formatter = logging.Formatter(fmt=log_fmt)
     app_handler = logging.StreamHandler()
@@ -54,10 +54,14 @@ def main():
 
     args = parser.parse_args()
 
+    if not args.subcommand:
+        parser.print_help()
+        sys.exit(1)
+
     # set up logging
     log_level = VERBOSITY[min(args.verbose, len(VERBOSITY) - 1)]
     try:
-        _init_logging(log_level)
+        _init_logging(log_level, args.subcommand)
     except ValueError as e:
         print(e)
         sys.exit(1)
@@ -77,20 +81,17 @@ def main():
                 + " package. Using python substitute that is much slower.")
 
     # run subcommand
-    if not args.subcommand:
-        parser.print_help()
-    else:
-        logger.info("Running %s subcommand." % args.subcommand)
-        try:
-            sys.exit(args.func(config, args))
-        except AptlyAPIException as e:
-            if e.status_code == 404 and "page not found" in e.args[0].lower():
-                logger.error("API reponded with '%s'. Check configured API url and run command with -vv to see failed request details." % e.args[0])
-                logger.debug("", exc_info=True)
-                sys.exit(128)
-            else:
-                raise
-        except (DidwwAptlyCtlError, requests.exceptions.RequestException) as e:
-            logger.error(e)
+    logger.info("Running %s subcommand." % args.subcommand)
+    try:
+        sys.exit(args.func(config, args))
+    except AptlyAPIException as e:
+        if e.status_code == 404 and "page not found" in e.args[0].lower():
+            logger.error("API reponded with '%s'. Check configured API url and run command with -vv to see failed request details." % e.args[0])
             logger.debug("", exc_info=True)
             sys.exit(128)
+        else:
+            raise
+    except (DidwwAptlyCtlError, requests.exceptions.RequestException) as e:
+        logger.error(e)
+        logger.debug("", exc_info=True)
+        sys.exit(128)
