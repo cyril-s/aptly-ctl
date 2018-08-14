@@ -12,8 +12,9 @@ def config_subparser(subparsers_action_object):
             description="Search packages in local repos.")
     parser_search.set_defaults(func=search)
 
-    parser_search.add_argument("queries", metavar="query", nargs="+",
-            help="Query in format documented at https://www.aptly.info/doc/feature/query/.")
+    parser_search.add_argument("queries", metavar="query", nargs="*",
+            help="Query in format documented at https://www.aptly.info/doc/feature/query/."
+                 " No query means list everything.")
 
     parser_search.add_argument("-r", "--repo", dest="repos", action="append",
             help="Limit search to specified repos.")
@@ -33,6 +34,8 @@ def config_subparser(subparsers_action_object):
 
 def search(config, args):
     aptly = ExtendedAptlyClient(config["url"])
+    if not args.queries:
+        args.queries.append("")
 
     if args.repos:
         repo_list = args.repos[:]
