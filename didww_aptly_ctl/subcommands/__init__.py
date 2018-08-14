@@ -4,6 +4,7 @@ from didww_aptly_ctl.subcommands import (
         search,
         repo,
         publish,
+        copy,
         )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
         "search",
         "repo",
         "publish",
+        "copy",
         ]
