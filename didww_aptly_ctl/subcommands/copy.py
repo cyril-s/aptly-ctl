@@ -49,7 +49,7 @@ def copy(config, args):
         for r in refs:
             print('"' + repr(PackageRef(r, args.target)) + '"')
 
-    update_exceptions = aptly.update_dependent_publishes(args.target, config, args.dry_run)
+    update_exceptions = aptly.update_dependent_publishes([args.target], config, args.dry_run)
     if len(update_exceptions) > 0:
         raise DidwwAptlyCtlError("Some publishes fail to update")
     else:
