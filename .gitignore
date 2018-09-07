@@ -9,3 +9,4 @@ sdist/
 
 .cache
 .pytest_cache
+*.swp

@@ -2,7 +2,7 @@ class PubSpec:
 
     def __init__(self, distribution, prefix="."):
         if '/' in distribution:
-            pref, sep, dist = distribution.partition('/')
+            pref, sep, dist = distribution.rpartition('/')
             if len(pref) == 0 or len(dist) == 0:
                 raise ValueError("refspec invalid")
             self._prefix = pref

@@ -1,7 +1,10 @@
 from . context import didww_aptly_ctl
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 from didww_aptly_ctl.Config import Config
+from didww_aptly_ctl.utils import PubSpec
 import pytest
+import os
+import yaml
 
 class TestConfig:
 
@@ -11,7 +14,7 @@ class TestConfig:
                 "name": "profile0",
                 "url": "http://localhost:8090/api",
                 "signing": {
-                    "gpg_key": "aba45rts",
+                    "gpgkey": "aba45rts",
                     "passphrase": "passphrase"
                 }
             },
@@ -19,7 +22,7 @@ class TestConfig:
                 "name": "profile1",
                 "url": "http://localhost:8080/api",
                 "signing": {
-                    "gpg_key": "xxxxxxxx",
+                    "gpgkey": "xxxxxxxx",
                     "passphrase": "xxxxxxxxx"
                 }
             },
@@ -27,24 +30,33 @@ class TestConfig:
                 "name": "my_profile",
                 "url": "http://localhost:8070/api",
                 "signing": {
-                    "gpg_key": "yyyyyyyyy",
+                    "gpgkey": "yyyyyyyyy",
                     "passphrase": "yyyyyyyy"
+                }
+            },
+            {
+                "name": "with_signing_overrides",
+                "url": "http://somehost:8090/api",
+                "signing": {
+                    "gpgkey": "default",
+                    "passphrase": "default"
+                },
+                "signing_overrides": {
+                    "./stretch": {
+                        "gpgkey": "stretch",
+                        "passphrase": "stretch"
+                    },
+                    "debian/jessie": {
+                        "gpgkey": "jessie",
+                        "passphrase": "jessie"
+                    }
                 }
             }
         ]
     }
 
-
     @pytest.fixture
-    def dummyConfig(self):
-        class _dummyConfig(Config):
-            def __init__(self):
-                pass
-        return _dummyConfig()
-
-
-    @pytest.fixture
-    def goodConfig(self, tmpdir):
+    def goodConfigPath(self, tmpdir):
         import yaml
         path_to_file = tmpdir.join("aptly-ctl.conf")
         config = self._goodConfig.copy()
@@ -53,110 +65,120 @@ class TestConfig:
         return path_to_file
 
 
-    def test_loading_nonexistent_config(self, tmpdir, dummyConfig):
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._load_config([tmpdir.join("aptly-ctl.conf")])
+    def test_config_init_nonexistent_path(self, tmpdir):
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(tmpdir.join("nonexistent.conf"))
+        assert "no such file or directory" in e.value.args[0].lower()
 
+    def test_config_init_from_directory(self, tmpdir):
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(tmpdir)
+        assert "is a directory" in e.value.args[0].lower()
 
-    def test_loading_existent_config(self, goodConfig, dummyConfig):
-        c = dummyConfig._load_config([goodConfig])
-        assert c is not None
-        assert len(c) > 0
+    def test_config_init_no_permissions(self, tmpdir):
+        path = tmpdir.join("not_readable.conf")
+        with open(path, 'w') as f:
+            os.chmod(f.fileno(), 0)
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(path)
+        assert "permission denied" in e.value.args[0].lower()
 
+    def test_config_init_invalid_yaml(self, tmpdir):
+        path = tmpdir.join("invalid.yaml")
+        with open(path, 'w') as f:
+            f.write("%invalid yaml!")
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(path)
+        assert "invalid yaml" in e.value.args[0].lower()
 
-    def test_get_profile_by_num(self, dummyConfig):
-        c = dummyConfig._get_profile_cfg(self._goodConfig, 0)
-        assert c is self._goodConfig["profiles"][0]
+    def test_config_init_existent_path(self, goodConfigPath):
+        assert Config(goodConfigPath).name == "profile0"
 
+    def test_config_init_set_profile_by_int(self, goodConfigPath):
+        assert Config(goodConfigPath, 1).name == "profile1"
 
-    def test_get_profile_by_name(self, dummyConfig):
-        c = dummyConfig._get_profile_cfg(self._goodConfig, "profile0")
-        assert c is self._goodConfig["profiles"][0]
+    def test_config_init_set_profile_by_name(self, goodConfigPath):
+        c = Config(goodConfigPath, "profile1")
+        assert c.name == "profile1"
+        assert c.url == self._goodConfig["profiles"][1]["url"]
 
+    def test_config_init_set_profile_by_partial_name(self, goodConfigPath):
+        c = Config(goodConfigPath, "my")
+        assert c.name == "my_profile"
+        assert c.url == self._goodConfig["profiles"][2]["url"]
 
-    def test_get_profile_by_partial_name(self, dummyConfig):
-        c = dummyConfig._get_profile_cfg(self._goodConfig, "my")
-        assert c is self._goodConfig["profiles"][2]
+    def test_config_init_without_profiles(self, tmpdir):
+        path = tmpdir.join("empty.conf")
+        with open(path, 'w'):
+            pass
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(path)
+        assert "config file must contain 'profiles' list" in e.value.args[0].lower()
 
+    def test_config_init_set_profile_wrong_num(self, goodConfigPath):
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(goodConfigPath, 55)
+        assert "there is no profile numbered" in e.value.args[0].lower()
 
-    def test_config_without_profiles(self, dummyConfig):
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._get_profile_cfg(dict(), 0)
+    def test_config_init_set_profile_ambiguous_name(self, goodConfigPath):
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(goodConfigPath, "profile")
+        assert "ambiguously matches" in e.value.args[0].lower()
 
+    def test_config_init_set_profile_wrong_name(self, goodConfigPath):
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(goodConfigPath, "nonexistent")
+        assert "cannot find configuration profile" in e.value.args[0].lower()
 
-    def test_get_profile_by_wrong_num(self, dummyConfig):
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._get_profile_cfg(self._goodConfig, 55)
+    def test_config_init_cfg_overrides(self, goodConfigPath):
+        url = "http://1.1.1.1:11"
+        gpgkey =  "111111"
+        c = Config(goodConfigPath, 0, ["url=%s" % url, "signing.gpgkey=%s" % gpgkey])
+        assert c.url == url
+        assert c.get_signing_config().gpgkey == gpgkey
+        assert c.name == "profile0"
 
+    def test_config_init_cfg_overrides_wrong_key(self, goodConfigPath):
+        url = "url http://localhost:9090/api"
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(goodConfigPath, 0, [url])
+        assert "incorrect configuration key in command line arguments" in e.value.args[0].lower()
 
-    def test_get_profile_by_ambiguous_name(self, dummyConfig):
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._get_profile_cfg(self._goodConfig, "profile")
+    def test_cfg_no_url(self, tmpdir):
+        wrong_cfg = {}
+        wrong_cfg["profiles"] = [ self._goodConfig["profiles"][0].copy() ]
+        del wrong_cfg["profiles"][0]["url"]
+        path_to_wrong_cfg = tmpdir.join("aptly-ctl-wrong.conf")
+        with open(path_to_wrong_cfg, 'a') as f:
+            yaml.dump(wrong_cfg, f)
+        with pytest.raises(DidwwAptlyCtlError) as e:
+            c = Config(path_to_wrong_cfg)
+        assert "specify url of api to connect to" in e.value.args[0].lower()
 
+    def test_init_no_cfg_only_overrides(self):
+        url = "http://1.1.1.1:11"
+        gpgkey =  "111111"
+        passphrase_file = "/etc/passphrase"
+        cfg_overrides = [
+                "url=%s" % url,
+                "signing.gpgkey=%s" % gpgkey,
+                "signing.passphrase_file=%s" % passphrase_file
+                ]
+        c = Config(False, cfg_overrides=cfg_overrides)
+        assert c.url == url
+        assert c.get_signing_config().gpgkey == gpgkey
+        assert c.get_signing_config().passphrase_file == passphrase_file
+        assert hasattr(c, "name") is False
 
-    def test_get_profile_by_wrong_name(self, dummyConfig):
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._get_profile_cfg(self._goodConfig, "nonexistent")
+    def test_get_overrided_signing_config(self, goodConfigPath):
+        c = Config(goodConfigPath, "with_sign")
+        assert c.get_signing_config().gpgkey == "default"
+        assert c.get_signing_config(PubSpec("./stretch")).gpgkey == "stretch"
+        assert c.get_signing_config(PubSpec("debian/jessie")).gpgkey == "jessie"
+        assert c.get_signing_config(PubSpec("none/none")).gpgkey == "default"
 
+    def test_get_overrided_signing_config_if_there_are_no_signing_overrides(self, goodConfigPath):
+        c = Config(goodConfigPath, 0)
+        assert c.get_signing_config().gpgkey == "aba45rts"
+        assert c.get_signing_config(PubSpec("./stretch")).gpgkey == "aba45rts"
 
-    def test_cfg_overrides(self, dummyConfig):
-        result = {
-            "url": "http://overriden/api",
-            "signing": {
-                "gpg_key": "ABCDEFG",
-                "passphrase": "pass=phrase",
-            },
-        }
-        cmd_overrides = [
-            "url=%s" % result["url"],
-            "signing.gpg_key=%s" % result["signing"]["gpg_key"],
-            "signing.passphrase=%s" % result["signing"]["passphrase"],
-        ]
-        c = dummyConfig._parse_cmd_line_overrides(cmd_overrides)
-        assert c == result
-
-
-    def test_cfg_overrides_wrong_key(self, dummyConfig):
-        cmd_overrides = ["url http://localhost:9090/api"]
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._parse_cmd_line_overrides(cmd_overrides)
-
-
-    def test_cfg_no_url(self, dummyConfig):
-        wrong_cfg = self._goodConfig["profiles"][0].copy()
-        wrong_cfg["url"] = None
-        dummyConfig._config = wrong_cfg
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config()
-
-
-    def test_cfg_no_gpg_key(self, dummyConfig):
-        wrong_cfg = self._goodConfig["profiles"][0].copy()
-        wrong_cfg["signing"]["skip"] = False
-        wrong_cfg["signing"]["gpg_key"] = None
-        dummyConfig._config = wrong_cfg
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config()
-
-
-    def test_cfg_both_passphrase_passphrase_file(self, dummyConfig):
-        wrong_cfg = self._goodConfig["profiles"][0].copy()
-        wrong_cfg["signing"]["skip"] = False
-        wrong_cfg["signing"]["gpg_key"] = "123456789"
-        wrong_cfg["signing"]["passphrase"] = "some_passs"
-        wrong_cfg["signing"]["passphrase_file"] = "/etc/some/path"
-        dummyConfig._config = wrong_cfg
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config()
-
-
-    def test_cfg_none_passphrase_passphrase_file(self, dummyConfig):
-        wrong_cfg = self._goodConfig["profiles"][0].copy()
-        wrong_cfg["signing"]["skip"] = False
-        wrong_cfg["signing"]["gpg_key"] = "123456789"
-        wrong_cfg["signing"]["passphrase"] = None
-        wrong_cfg["signing"]["passphrase_file"] = None
-        dummyConfig._config = wrong_cfg
-        with pytest.raises(DidwwAptlyCtlError):
-            c = dummyConfig._check_config()
-            

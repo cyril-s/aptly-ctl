@@ -24,7 +24,7 @@ def config_subparser(subparsers_action_object):
 
 
 def copy(config, args):
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
     input_refs = iter(args.refs) if len(args.refs) > 0 else sys.stdin
     refs = []
 

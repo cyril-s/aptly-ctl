@@ -52,7 +52,7 @@ def pprint_repo(repo, packages=[]):
 
 
 def list(config, args):
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
     repo_list = aptly.repos.list()
     repo_list.sort(key=lambda k: k.name)
     for r in repo_list:
@@ -64,7 +64,7 @@ def list(config, args):
 
 
 def create(config, args):
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
     try:
         create_result = aptly.repos.create(args.name, args.comment, args.dist, args.comp)
     except AptlyAPIException as e:
@@ -78,7 +78,7 @@ def create(config, args):
 
 
 def edit(config, args):
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
     try:
         edit_result = aptly.repos.edit(args.name, args.comment, args.dist, args.comp)
     except AptlyAPIException as e:
@@ -92,7 +92,7 @@ def edit(config, args):
 
 
 def delete(config, args):
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
     try:
         aptly.repos.delete(args.name, args.force)
     except AptlyAPIException as e:

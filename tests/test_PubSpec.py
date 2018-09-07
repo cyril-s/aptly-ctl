@@ -46,3 +46,11 @@ class TestPubSpec:
             with pytest.raises(AttributeError):
                 setattr(p, attr, "somevalule")
 
+    def test_prefix_with_slashes(self):
+        p = PubSpec("public/debian/stretch")
+        assert p.distribution == "stretch"
+        assert p.prefix == "public/debian"
+        assert repr(p) == "public/debian/stretch"
+        assert str(p) == "public/debian/stretch"
+
+

@@ -25,7 +25,7 @@ def config_subparser(subparsers_action_object):
 
 
 def remove(config, args):
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
     all_refs = dict()
     input_refs = (r for r in args.refs) if len(args.refs) > 0 else sys.stdin
 

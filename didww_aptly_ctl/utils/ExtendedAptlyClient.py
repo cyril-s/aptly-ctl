@@ -1,7 +1,7 @@
 import logging
 from aptly_api import Client
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.utils.PackageRef import PackageRef
+from didww_aptly_ctl.utils import PackageRef, PubSpec
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 
 logger = logging.getLogger(__name__)
@@ -59,13 +59,7 @@ class ExtendedAptlyClient(Client):
                 update_result = self.publish.update(
                         prefix = p.prefix,
                         distribution = p.distribution,
-                        sign_skip = config["signing"]["skip"],
-                        sign_batch = config["signing"]["batch"],
-                        sign_gpgkey = config["signing"]["gpg_key"],
-                        sign_keyring = config["signing"]["keyring"],
-                        sign_secret_keyring = config["signing"]["secret_keyring"],
-                        sign_passphrase = config["signing"]["passphrase"],
-                        sign_passphrase_file = config["signing"]["passphrase_file"],
+                        **config.get_signing_config(PubSpec(p.distribution, p.prefix)).as_dict(prefix="sign_")
                         )
             except AptlyAPIException as e:
                 logger.error('Can\'t update publish with prefix "{}", dist "{}".'.format(p.prefix,p.distribution))

@@ -33,7 +33,7 @@ def config_subparser(subparsers_action_object):
 
 
 def search(config, args):
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
     if not args.queries:
         args.queries.append("")
 

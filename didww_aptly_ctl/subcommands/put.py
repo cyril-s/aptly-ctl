@@ -26,7 +26,7 @@ def config_subparser(subparsers_action_object):
 def put(config, args):
     timestamp = datetime.utcnow().timestamp()
     directory = "{}_{:.0f}".format(args.repo, timestamp)
-    aptly = ExtendedAptlyClient(config["url"])
+    aptly = ExtendedAptlyClient(config.url)
 
     # don't try to upload files if repos does not exist
     try:

@@ -1,28 +1,92 @@
 import logging
 import os
 import yaml
+import errno
 from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
 from didww_aptly_ctl.utils.misc import nested_set, nested_update
+from didww_aptly_ctl.utils import PubSpec
 
 logger = logging.getLogger(__name__)
 
 # map number of '-v' args to log level
 VERBOSITY = ("WARN", "INFO", "DEBUG")
 
+class SigningConfig:
+
+    def __init__(
+            self,
+            skip=False,
+            batch=True,
+            gpgkey=None,
+            keyring=None,
+            secret_keyring=None,
+            passphrase=None,
+            passphrase_file=None,
+            **kwargs):
+        if kwargs:
+            unknown_keys = []
+            for k, v in kwargs.items():
+                unknown_keys.append("{}={}".format(k, v))
+            raise DidwwAptlyCtlError("Unknown configuration keys: {}".format(unknown_keys))
+
+        if not skip:
+            if not gpgkey:
+                raise ValueError("Config must contain 'gpgkey'. Do not rely on default key.")
+            if (passphrase and passphrase_file) or (not passphrase and not passphrase_file):
+                raise ValueError("Config must contain either 'passphrase' or 'passphrase_file'.")
+        self._conf = {
+                "skip": skip,
+                "batch": batch,
+                "gpgkey": gpgkey,
+                "keyring": keyring,
+                "secret_keyring": secret_keyring,
+                "passphrase": passphrase,
+                "passphrase_file": passphrase_file
+                }
+
+    @property
+    def skip(self):
+        return self._conf["skip"]
+
+    @property
+    def batch(self):
+        return self._conf["batch"]
+
+    @property
+    def gpgkey(self):
+        return self._conf["gpgkey"]
+
+    @property
+    def keyring(self):
+        return self._conf["keyring"]
+
+    @property
+    def secret_keyring(self):
+        return self._conf["secret_keyring"]
+
+    @property
+    def passphrase(self):
+        return self._conf["passphrase"]
+
+    @property
+    def passphrase_file(self):
+        return self._conf["passphrase_file"]
+
+    def as_dict(self, prefix=""):
+        return {
+                "{prefix}skip".format(prefix=prefix): self.skip,
+                "{prefix}batch".format(prefix=prefix): self.batch,
+                "{prefix}gpgkey".format(prefix=prefix): self.gpgkey,
+                "{prefix}keyring".format(prefix=prefix): self.keyring,
+                "{prefix}secret_keyring".format(prefix=prefix): self.secret_keyring,
+                "{prefix}passphrase".format(prefix=prefix): self.passphrase,
+                "{prefix}passphrase_file".format(prefix=prefix): self.passphrase_file
+                }
+
+
 class Config:
 
-    defaults = {
-            "url": None,
-            "signing": {
-                "skip": False,
-                "batch": True,
-                "gpg_key": None,
-                "keyring": None,
-                "secret_keyring": None,
-                "passphrase": None,
-                "passphrase_file": None
-                }
-            }
+    defaults = {}
 
     try_files_home = [
         "{home}/aptly-ctl.yml",
@@ -49,85 +113,98 @@ class Config:
                 logger.warn("Could not get $HOME.")
                 self.try_files_home = []
             try_files = self.try_files_home + self.try_files_system
+        if cfg_path is False:
+            try_files = []
         else:
             try_files = [cfg_path]
 
-        try:
-            file_cfg = self._load_config(try_files)
-        except DidwwAptlyCtlError as e:
-            logger.warn("Could not get config from these files: " + ", ".join(try_files))
-            file_cfg = {}
+        file_cfg = self._load_config(try_files, fail_fast=(cfg_path is not None))
+        if file_cfg is None:
             profile_cfg = {}
         else:
             profile_cfg = self._get_profile_cfg(file_cfg, profile)
 
-        cmd_line_cfg = self._parse_cmd_line_overrides(cfg_overrides)
+        cmd_line_cfg = self._parse_cfg_overrides(cfg_overrides)
 
-        self._config = {}
+        config = {}
         for d in [self.defaults, profile_cfg, cmd_line_cfg]:
-            nested_update(self._config, d)
+            nested_update(config, d)
 
-        logger.debug("Config before check: %s" % self._config)
-        self._check_config()
+        self._default_signing_config = SigningConfig(**config["signing"])
+        self._signing_overrides = {}
+        if "signing_overrides" in config:
+            for pub, cfg in config["signing_overrides"].items():
+                self._signing_overrides[pub]  = SigningConfig(**cfg)
 
+        try:
+            self.name = config["name"]
+        except KeyError:
+            pass
 
-    def __getitem__(self, key):
-        return self._config[key]
-
-
-    def _check_config(self):
-        if not self["url"]:
+        try:
+            self.url = config["url"]
+        except KeyError:
             raise DidwwAptlyCtlError("Specify url of API to connect to.")
-        if not self["signing"]["skip"] and not self["signing"]["gpg_key"]:
-            raise DidwwAptlyCtlError("Specify signing.gpg_key. Do not rely on default key.")
-        if self["signing"]["passphrase"] is not None \
-            and self["signing"]["passphrase_file"] is not None:
-            raise DidwwAptlyCtlError("Specify either signing.passphrase or signing.passphrase_file.")
-        if  self["signing"]["passphrase"] is None \
-            and self["signing"]["passphrase_file"] is None:
-            raise DidwwAptlyCtlError("Specify either signing.passphrase or signing.passphrase_file.")
 
 
-    def _load_config(self, files):
-        "Try to load config from the first existing file and throw DidwwAptlyCtlError if options are exausted"
+    def get_signing_config(self, pub_spec=None):
+        if pub_spec is None:
+            return self._default_signing_config
+        elif not isinstance(pub_spec, PubSpec):
+            raise TypeError("expected PubSpec, not %s" % type(pub_spec).__name__)
+        else:
+            return self._signing_overrides.get(str(pub_spec), self._default_signing_config)
+
+
+    def _load_config(self, files, fail_fast=False):
+        """Try to load config from the first existing file.
+           Throws DidwwAptlyCtlError if options are exausted.
+        """
+        c = None
         for file in files:
             try:
                 with open(file, "r") as f:
                     c = yaml.load(f)
+                    if c is None:
+                        c = {}
                     logger.info('Loadded config from "%s"' % file)
-                    return c
-            except FileNotFoundError as e:
-                logger.debug('Can\'t load config from "%s"' % file)
             except yaml.YAMLError as e:
-                raise DidwwAptlyCtlError("Cannot parse config: ", e)
-        else:
-            raise DidwwAptlyCtlError("Could not find config file.")
+                raise DidwwAptlyCtlError('Invalid YAML in "{}": {}'.format(file, e))
+            except OSError as e:
+                if e.errno in [errno.EACCES, errno.ENOENT, errno.EISDIR]:
+                    if fail_fast or e.errno in [errno.EACCES, errno.EISDIR]:
+                        raise DidwwAptlyCtlError('Cannot load config from "{}": {}'.format(file, e.strerror))
+                    else:
+                        logger.debug('Cannot load config from "{}": {}'.format(file, e.strerror))
+                else:
+                    raise e
+        return c
 
 
     def _get_profile_cfg(self, cfg, profile):
         try:
             profile_list = [ cfg["profiles"][int(profile)] ]
-        except KeyError as e:
-            raise DidwwAptlyCtlError("Config file doesn't have %s key." % e)
+        except (KeyError, TypeError):
+            raise DidwwAptlyCtlError("Config file must contain 'profiles' list")
         except IndexError:
             raise DidwwAptlyCtlError("There is no profile numbered %s" % profile)
         except ValueError:
             profile_list = [ prof for prof in cfg["profiles"] if prof.get("name", "").startswith(profile) ]
 
         if len(profile_list) == 0:
-            raise DidwwAptlyCtlError('Cannot find configuration profle "%s"' % profile)
+            raise DidwwAptlyCtlError('Cannot find configuration profile "%s"' % profile)
         elif len(profile_list) > 1:
-            raise DidwwAptlyCtlError('Profile "{}" equivocally matches {}'.format(profile, profile_list))
+            raise DidwwAptlyCtlError('Profile "{}" ambiguously matches {}'.format(profile, profile_list))
         else:
             return profile_list[0]
 
     
-    def _parse_cmd_line_overrides(self, cfg_overrides):
+    def _parse_cfg_overrides(self, cfg_overrides):
         result = dict()
         for expr in cfg_overrides:
             key, sep, val = expr.partition("=")
             if len(sep) == 0 or len(key) == 0:
-                raise DidwwAptlyCtlError('Wrong configuration key: "%s"' % expr)
+                raise DidwwAptlyCtlError('Incorrect configuration key in command line arguments: "%s"' % expr)
             nested_set(result, key.split("."), val)
         else:
             return result

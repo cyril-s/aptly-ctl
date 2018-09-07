@@ -2,10 +2,10 @@ profiles:
   - name: test
     url: http://localhost:8090/api
     signing:
-      gpg_key: "DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0"
+      gpgkey: "DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0"
       passphrase_file: "/home/aptly/gpg_pass"
   - name: broken
     url: http://localhost:8090/api/api
     signing:
-      gpg_key: "DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0"
+      gpgkey: "DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0"
       passphrase_file: "/home/aptly/gpg_pass"
