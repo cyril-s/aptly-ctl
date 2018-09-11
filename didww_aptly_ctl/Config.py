@@ -113,7 +113,7 @@ class Config:
                 logger.warn("Could not get $HOME.")
                 self.try_files_home = []
             try_files = self.try_files_home + self.try_files_system
-        if cfg_path is False:
+        elif cfg_path is False:
             try_files = []
         else:
             try_files = [cfg_path]
