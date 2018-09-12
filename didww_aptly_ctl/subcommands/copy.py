@@ -47,7 +47,7 @@ def copy(config, args):
             raise
     else:
         for r in refs:
-            print('"' + repr(PackageRef(r, args.target)) + '"')
+            print('"' + repr(PackageRef(args.target + "/" + r)) + '"')
 
     update_exceptions = aptly.update_dependent_publishes([args.target], config, args.dry_run)
     if len(update_exceptions) > 0:

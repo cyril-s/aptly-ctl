@@ -42,7 +42,8 @@ class ExtendedAptlyClient(Client):
                 raise DidwwAptlyCtlError('Search for direct reference "{}" in repo "{}" '
                     'returned more than 1 result.'.format(ref.dir_ref, r))
             elif len(search_result) == 1:
-                new_ref = PackageRef(search_result[0].key, r)
+                new_ref = PackageRef(search_result[0].key)
+                new_ref.repo = r
                 new_ref.details = search_result[0]
                 result.append()
         else:

@@ -15,42 +15,66 @@ class PackageRef:
     Repo can in specified in reference: "<repo>/<reference>".
     In reference with version <repo> takes presendence on repo argument.
     """
-    key_regexp = re.compile(r"(\w+?)?P(\w+) (\S+) (\S+)( \w+)?$")
+    key_regexp = re.compile(r"(\w+?)?P(\w+) (\S+) (\S+) (\w+)$")
     dir_ref_regexp = re.compile(r"(\S+)_([a-zA-Z0-9.+-:~]+)_(\w+)$")
 
-    def __init__(self, reference, local_repo=None):
+    def __init__(self, reference):
+        self._fields = {}
         repo, sep, ref = reference.partition("/")
         if len(sep) == 0:
             ref = repo
-            self.repo = local_repo
-        elif len(repo) > 0:
-            self.repo = repo
+            self.repo = None
+        elif len(repo) == 0:
+            self.repo = None
         else:
-            self.repo = local_repo
+            self.repo = repo
 
         if self.key_regexp.match(ref):
             m = self.key_regexp.match(ref)
-            self.prefix = "" if m.group(1) is None else m.group(1)
-            self.arch = m.group(2)
-            self.name = m.group(3)
-            self.version = Version(m.group(4))
-            self.hash = "" if m.group(5) is None else m.group(5)[1:] # strip leading space
+            self._fields["prefix"] = m.group(1) # None if empty
+            self._fields["arch"] = m.group(2)
+            self._fields["name"] = m.group(3)
+            self._fields["version"] = Version(m.group(4))
+            self._fields["hash"] = m.group(5)
         elif self.dir_ref_regexp.match(ref):
             m = self.dir_ref_regexp.match(ref)
-            self.prefix = ""
-            self.name = m.group(1)
-            self.version = Version(m.group(2))
-            self.arch = m.group(3)
-            self.hash = ""
+            self._fields["prefix"] = None
+            self._fields["name"] = m.group(1)
+            self._fields["version"] = Version(m.group(2))
+            self._fields["arch"] = m.group(3)
+            self._fields["hash"] = None
         else:
             raise ValueError('Incorrect package reference "%s"' % reference)
 
 
     @property
-    def key(self):
-        h = " " + self.hash if self.hash else ""
-        return "{}P{} {} {}{}".format(self.prefix, self.arch, self.name, self.version, h)
+    def prefix(self):
+        return self._fields["prefix"]
 
+    @property
+    def arch(self):
+        return self._fields["arch"]
+
+    @property
+    def name(self):
+        return self._fields["name"]
+
+    @property
+    def version(self):
+        return self._fields["version"]
+
+    @property
+    def hash(self):
+        return self._fields["hash"]
+
+    @property
+    def key(self):
+        "Return either aptly key if hash is not empty or None if it is"
+        if self.hash:
+            p = self.prefix if self.prefix else ""
+            return "{}P{} {} {} {}".format(p, self.arch, self.name, self.version, self.hash)
+        else:
+            return None
 
     @property
     def dir_ref(self):
@@ -58,23 +82,54 @@ class PackageRef:
 
 
     def __repr__(self):
+        "Return the most accurate reference that is feedable to constructor"
         r = self.repo + "/" if self.repo else ""
-        return r + self.key
+        if self.hash:
+            return r + self.key
+        else:
+            return r + self.dir_ref
 
 
     def __str__(self):
-        return self.key
+        "Return either key, or dir_ref if hash is empty"
+        if self.hash:
+            return self.key
+        else:
+            return self.dir_ref
 
 
     def __eq__(self, other):
-        t_self = (self.name, self.prefix, self.arch, self.version, self.hash)
-        t_other = (other.name, other.prefix, other.arch, other.version, other.hash)
+        t_self = (
+                self.name,
+                self.prefix if self.prefix else "",
+                self.arch,
+                self.version,
+                self.hash if self.hash else ""
+                )
+        t_other = (
+                other.name,
+                other.prefix if other.prefix else "",
+                other.arch,
+                other.version,
+                other.hash if other.hash else ""
+                )
         return t_self == t_other
 
 
     def __lt__(self, other):
-        t_self = (self.name, self.prefix, self.arch, self.version, self.hash)
-        t_other = (other.name, other.prefix, other.arch, other.version, other.hash)
+        t_self = (
+                self.name,
+                self.prefix if self.prefix else "",
+                self.arch,
+                self.version,
+                self.hash if self.hash else ""
+                )
+        t_other = (
+                other.name,
+                other.prefix if other.prefix else "",
+                other.arch,
+                other.version,
+                other.hash if other.hash else ""
+                )
         return t_self < t_other
-
 
