@@ -1,8 +1,8 @@
 import logging
-from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
+from aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.PackageRef import PackageRef
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.utils.PackageRef import PackageRef
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def search(config, args):
         search_result = aptly.repos.list()
         repo_list = [ r[0] for r in search_result ]
         if len(repo_list) == 0:
-            raise DidwwAptlyCtlError("Seems aptly doesn't have any local repos.")
+            raise AptlyCtlError("Seems aptly doesn't have any local repos.")
     repo_list.sort()
     logger.info("Searching in repos {}".format(", ".join(repo_list)))
 
@@ -76,7 +76,7 @@ def search(config, args):
                 search_result = aptly.repos.search_packages(r, q, args.with_deps, args.details)
             except AptlyAPIException as e:
                 if e.status_code == 404:
-                    raise DidwwAptlyCtlError(e) from e
+                    raise AptlyCtlError(e) from e
                 else:
                     raise
             logger.debug("For query '{}' in repo '{}' api returned: {}".format(q, r, search_result))

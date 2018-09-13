@@ -1,7 +1,7 @@
-from . context import didww_aptly_ctl
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.Config import Config
-from didww_aptly_ctl.utils import PubSpec
+from . context import aptly_ctl
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.Config import Config
+from aptly_ctl.utils import PubSpec
 import pytest
 import os
 import yaml
@@ -66,12 +66,12 @@ class TestConfig:
 
 
     def test_config_init_nonexistent_path(self, tmpdir):
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(tmpdir.join("nonexistent.conf"))
         assert "no such file or directory" in e.value.args[0].lower()
 
     def test_config_init_from_directory(self, tmpdir):
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(tmpdir)
         assert "is a directory" in e.value.args[0].lower()
 
@@ -79,7 +79,7 @@ class TestConfig:
         path = tmpdir.join("not_readable.conf")
         with open(path, 'w') as f:
             os.chmod(f.fileno(), 0)
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(path)
         assert "permission denied" in e.value.args[0].lower()
 
@@ -87,7 +87,7 @@ class TestConfig:
         path = tmpdir.join("invalid.yaml")
         with open(path, 'w') as f:
             f.write("%invalid yaml!")
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(path)
         assert "invalid yaml" in e.value.args[0].lower()
 
@@ -111,22 +111,22 @@ class TestConfig:
         path = tmpdir.join("empty.conf")
         with open(path, 'w'):
             pass
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(path)
         assert "config file must contain 'profiles' list" in e.value.args[0].lower()
 
     def test_config_init_set_profile_wrong_num(self, goodConfigPath):
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(goodConfigPath, 55)
         assert "there is no profile numbered" in e.value.args[0].lower()
 
     def test_config_init_set_profile_ambiguous_name(self, goodConfigPath):
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(goodConfigPath, "profile")
         assert "ambiguously matches" in e.value.args[0].lower()
 
     def test_config_init_set_profile_wrong_name(self, goodConfigPath):
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(goodConfigPath, "nonexistent")
         assert "cannot find configuration profile" in e.value.args[0].lower()
 
@@ -140,7 +140,7 @@ class TestConfig:
 
     def test_config_init_cfg_overrides_wrong_key(self, goodConfigPath):
         url = "url http://localhost:9090/api"
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(goodConfigPath, 0, [url])
         assert "incorrect configuration key in command line arguments" in e.value.args[0].lower()
 
@@ -151,7 +151,7 @@ class TestConfig:
         path_to_wrong_cfg = tmpdir.join("aptly-ctl-wrong.conf")
         with open(path_to_wrong_cfg, 'a') as f:
             yaml.dump(wrong_cfg, f)
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = Config(path_to_wrong_cfg)
         assert "specify url of api to connect to" in e.value.args[0].lower()
 

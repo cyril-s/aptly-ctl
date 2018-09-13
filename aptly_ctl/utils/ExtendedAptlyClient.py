@@ -1,8 +1,8 @@
 import logging
 from aptly_api import Client
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.utils import PackageRef, PubSpec
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
+from aptly_ctl.utils import PackageRef, PubSpec
+from aptly_ctl.exceptions import AptlyCtlError
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class ExtendedAptlyClient(Client):
             search_result = self.repos.search_packages(r, ref.dir_ref, detailed=True)
             logger.debug('search for "{}" in "{}": {}'.format(ref.dir_ref, r, search_result))
             if len(search_result) > 1:
-                raise DidwwAptlyCtlError('Search for direct reference "{}" in repo "{}" '
+                raise AptlyCtlError('Search for direct reference "{}" in repo "{}" '
                     'returned more than 1 result.'.format(ref.dir_ref, r))
             elif len(search_result) == 1:
                 new_ref = PackageRef(search_result[0].key)

@@ -1,9 +1,9 @@
 import logging
 from pprint import pprint
-from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
+from aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
+from aptly_ctl.exceptions import AptlyCtlError
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.utils.PackageRef import PackageRef
+from aptly_ctl.utils.PackageRef import PackageRef
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def create(config, args):
         create_result = aptly.repos.create(args.name, args.comment, args.dist, args.comp)
     except AptlyAPIException as e:
         if e.status_code == 400:
-            raise DidwwAptlyCtlError(e) from e
+            raise AptlyCtlError(e) from e
         else:
             raise
     else:
@@ -83,7 +83,7 @@ def edit(config, args):
         edit_result = aptly.repos.edit(args.name, args.comment, args.dist, args.comp)
     except AptlyAPIException as e:
         if e.status_code in [0, 404]:
-            raise DidwwAptlyCtlError(e) from e
+            raise AptlyCtlError(e) from e
         else:
             raise
     else:
@@ -97,7 +97,7 @@ def delete(config, args):
         aptly.repos.delete(args.name, args.force)
     except AptlyAPIException as e:
         if e.status_code in [404, 409]:
-            raise DidwwAptlyCtlError(e) from e
+            raise AptlyCtlError(e) from e
         else:
             raise
     else:

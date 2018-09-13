@@ -2,9 +2,9 @@ import logging
 import os
 import yaml
 import errno
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.misc import nested_set, nested_update
-from didww_aptly_ctl.utils import PubSpec
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.utils.misc import nested_set, nested_update
+from aptly_ctl.utils import PubSpec
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +27,13 @@ class SigningConfig:
             unknown_keys = []
             for k, v in kwargs.items():
                 unknown_keys.append("{}={}".format(k, v))
-            raise DidwwAptlyCtlError("Unknown configuration keys: {}".format(unknown_keys))
+            raise AptlyCtlError("Unknown configuration keys: {}".format(unknown_keys))
 
         if not skip:
             if not gpgkey:
-                raise DidwwAptlyCtlError("Config must contain 'gpgkey'. Do not rely on default key.")
+                raise AptlyCtlError("Config must contain 'gpgkey'. Do not rely on default key.")
             if (passphrase and passphrase_file) or (not passphrase and not passphrase_file):
-                raise DidwwAptlyCtlError("Config must contain either 'passphrase' or 'passphrase_file'.")
+                raise AptlyCtlError("Config must contain either 'passphrase' or 'passphrase_file'.")
         self._conf = {
                 "skip": skip,
                 "batch": batch,
@@ -144,7 +144,7 @@ class Config:
         try:
             self.url = config["url"]
         except KeyError as e:
-            raise DidwwAptlyCtlError("Specify url of API to connect to.") from e
+            raise AptlyCtlError("Specify url of API to connect to.") from e
 
 
     def get_signing_config(self, pub_spec=None):
@@ -158,7 +158,7 @@ class Config:
 
     def _load_config(self, files, fail_fast=False):
         """Try to load config from the first existing file.
-           Throws DidwwAptlyCtlError if options are exausted.
+           Throws AptlyCtlError if options are exausted.
         """
         c = None
         for file in files:
@@ -169,11 +169,11 @@ class Config:
                         c = {}
                     logger.info('Loadded config from "%s"' % file)
             except yaml.YAMLError as e:
-                raise DidwwAptlyCtlError('Invalid YAML in "{}": {}'.format(file, e)) from e
+                raise AptlyCtlError('Invalid YAML in "{}": {}'.format(file, e)) from e
             except OSError as e:
                 if e.errno in [errno.EACCES, errno.ENOENT, errno.EISDIR]:
                     if fail_fast or e.errno in [errno.EACCES, errno.EISDIR]:
-                        raise DidwwAptlyCtlError('Cannot load config from "{}": {}'.format(file, e.strerror)) from e
+                        raise AptlyCtlError('Cannot load config from "{}": {}'.format(file, e.strerror)) from e
                     else:
                         logger.debug('Cannot load config from "{}": {}'.format(file, e.strerror))
                 else:
@@ -185,16 +185,16 @@ class Config:
         try:
             profile_list = [ cfg["profiles"][int(profile)] ]
         except (KeyError, TypeError) as e:
-            raise DidwwAptlyCtlError("Config file must contain 'profiles' list") from e
+            raise AptlyCtlError("Config file must contain 'profiles' list") from e
         except IndexError as e:
-            raise DidwwAptlyCtlError("There is no profile numbered %s" % profile) from e
+            raise AptlyCtlError("There is no profile numbered %s" % profile) from e
         except ValueError:
             profile_list = [ prof for prof in cfg["profiles"] if prof.get("name", "").startswith(profile) ]
 
         if len(profile_list) == 0:
-            raise DidwwAptlyCtlError('Cannot find configuration profile "%s"' % profile)
+            raise AptlyCtlError('Cannot find configuration profile "%s"' % profile)
         elif len(profile_list) > 1:
-            raise DidwwAptlyCtlError('Profile "{}" ambiguously matches {}'.format(profile, profile_list))
+            raise AptlyCtlError('Profile "{}" ambiguously matches {}'.format(profile, profile_list))
         else:
             return profile_list[0]
 
@@ -204,7 +204,7 @@ class Config:
         for expr in cfg_overrides:
             key, sep, val = expr.partition("=")
             if len(sep) == 0 or len(key) == 0:
-                raise DidwwAptlyCtlError('Incorrect configuration key in command line arguments: "%s"' % expr)
+                raise AptlyCtlError('Incorrect configuration key in command line arguments: "%s"' % expr)
             nested_set(result, key.split("."), val)
         else:
             return result

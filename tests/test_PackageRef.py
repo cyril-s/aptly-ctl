@@ -1,5 +1,5 @@
-from . context import didww_aptly_ctl
-from didww_aptly_ctl.utils import PackageRef, Version
+from . context import aptly_ctl
+from aptly_ctl.utils import PackageRef, Version
 import pytest
 import random
 
@@ -96,7 +96,7 @@ class TestPackageRef:
         assert repr(r) == "main/Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"
 
     def test_constructor_from_repr(self):
-        A = PackageRef("jessie_unstable/Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        A = PackageRef("jessie_unstable/Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef(repr(A))
         assert A.prefix == B.prefix
         assert A.arch == B.arch
@@ -106,55 +106,55 @@ class TestPackageRef:
         assert A.repo == B.repo
 
     def test_cmp_equlity(self):
-        A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        A = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
         assert A == B
 
     def test_cmp_name(self):
-        A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        A = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
         B = PackageRef("Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")
         assert A > B
         assert B < A
 
     def test_cmp_architecture(self):
-        A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("Pi386 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        A = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("Pi386 billing 2.2.0~rc5 f2b7dc2061b9d95c")
         assert A < B
         assert B > A
 
     def test_cmp_version(self):
-        A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("Pamd64 didww-billing 2.2.0~rc6 f2b7dc2061b9d95c")
+        A = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("Pamd64 billing 2.2.0~rc6 f2b7dc2061b9d95c")
         assert A < B
         assert B > A
 
     def test_cmp_hash(self):
-        A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("Pamd64 didww-billing 2.2.0~rc5 x2b7dc2061b9d95c")
+        A = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("Pamd64 billing 2.2.0~rc5 x2b7dc2061b9d95c")
         assert A < B
         assert B > A
 
     def test_cmp_emplty_hash(self):
-        A = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("didww-billing_2.2.0~rc5_amd64")
+        A = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("billing_2.2.0~rc5_amd64")
         assert A > B
         assert B < A
 
     def test_cmp_prefix(self):
-        A = PackageRef("prefixPamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("afixPamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        A = PackageRef("prefixPamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("afixPamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
         assert A > B
         assert B < A
 
     def test_cmp_empty_prefix(self):
-        A = PackageRef("prefixPamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        A = PackageRef("prefixPamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
         assert A > B
         assert B < A
 
     def test_cmp_repo(self):
-        A = PackageRef("jessie_unstable/Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
-        B = PackageRef("stretch_stable/Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        A = PackageRef("jessie_unstable/Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
+        B = PackageRef("stretch_stable/Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c")
         assert A == B
 
     def test_sort_order(self):
@@ -163,10 +163,10 @@ class TestPackageRef:
                 PackageRef("Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"),
                 PackageRef("Pi386 aptly 2.2.0~rc6 f2b7dc2061b9d95c"),
                 PackageRef("prefixPamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"),
-                PackageRef("Pamd64 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c"),
-                PackageRef("Pamd64 didww-billing 2.2.0~rc5 x2b7dc2061b9d95c"),
-                PackageRef("Pamd64 didww-billing 2.2.0~rc6 f2b7dc2061b9d95c"),
-                PackageRef("Pi386 didww-billing 2.2.0~rc5 f2b7dc2061b9d95c"),
+                PackageRef("Pamd64 billing 2.2.0~rc5 f2b7dc2061b9d95c"),
+                PackageRef("Pamd64 billing 2.2.0~rc5 x2b7dc2061b9d95c"),
+                PackageRef("Pamd64 billing 2.2.0~rc6 f2b7dc2061b9d95c"),
+                PackageRef("Pi386 billing 2.2.0~rc5 f2b7dc2061b9d95c"),
                 ]
         shuffled_list = ordered_list[:]
         random.shuffle(shuffled_list)

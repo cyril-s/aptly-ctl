@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.PackageRef import PackageRef
+from aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.utils.PackageRef import PackageRef
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def put(config, args):
         aptly.repos.show(args.repo)
     except AptlyAPIException as e:
         if e.status_code == 404:
-            raise DidwwAptlyCtlError("Local repo '%s' not found." % args.repo) from e
+            raise AptlyCtlError("Local repo '%s' not found." % args.repo) from e
         else:
             raise
 
@@ -42,7 +42,7 @@ def put(config, args):
         upload_result = aptly.files.upload(directory, *args.packages)
     except AptlyAPIException as e:
         if e.status_code == 0 and e.args[0].startswith("File to upload"):
-            raise DidwwAptlyCtlError(e) from e
+            raise AptlyCtlError(e) from e
         else:
             raise
     else:
@@ -70,10 +70,10 @@ def put(config, args):
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")
-        raise DidwwAptlyCtlError("Nothing added or removed.")
+        raise AptlyCtlError("Nothing added or removed.")
 
     update_exceptions = aptly.update_dependent_publishes([args.repo], config)
     if len(update_exceptions) > 0:
-        raise DidwwAptlyCtlError("Some publishes fail to update.")
+        raise AptlyCtlError("Some publishes fail to update.")
     else:
         return 0

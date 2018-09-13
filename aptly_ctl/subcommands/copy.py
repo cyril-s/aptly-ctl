@@ -1,9 +1,9 @@
 import logging
 import sys
-from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
+from aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.PackageRef import PackageRef
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.utils.PackageRef import PackageRef
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def copy(config, args):
             refs.append(PackageRef(r).key)
 
     if not refs:
-        raise DidwwAptlyCtlError("No reference were supplied. Nothing to copy.")
+        raise AptlyCtlError("No reference were supplied. Nothing to copy.")
 
     logger.info("Copying {} into {}".format(refs, args.target))
     try:
@@ -42,7 +42,7 @@ def copy(config, args):
             logger.debug("add result: {}".format(add_result))
     except AptlyAPIException as e:
         if e.status_code in [400, 404]:
-            raise DidwwAptlyCtlError(e) from e
+            raise AptlyCtlError(e) from e
         else:
             raise
     else:
@@ -51,6 +51,6 @@ def copy(config, args):
 
     update_exceptions = aptly.update_dependent_publishes([args.target], config, args.dry_run)
     if len(update_exceptions) > 0:
-        raise DidwwAptlyCtlError("Some publishes fail to update")
+        raise AptlyCtlError("Some publishes fail to update")
     else:
         return 0

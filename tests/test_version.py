@@ -1,5 +1,5 @@
-from . context import didww_aptly_ctl
-from didww_aptly_ctl.utils import Version
+from . context import aptly_ctl
+from aptly_ctl.utils import Version
 import pytest
 
 class TestVersion(object):

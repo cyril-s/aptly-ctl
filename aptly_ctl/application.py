@@ -2,12 +2,12 @@ import argparse
 import logging
 import sys
 import requests.exceptions
-from didww_aptly_ctl import app_logger, __version__, __progName__
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.Version import system_ver_compare
-from didww_aptly_ctl.Config import Config, VERBOSITY
+from aptly_ctl import app_logger, __version__, __progName__
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.utils.Version import system_ver_compare
+from aptly_ctl.Config import Config, VERBOSITY
 from aptly_api.base import AptlyAPIException
-import didww_aptly_ctl.subcommands
+import aptly_ctl.subcommands
 
 def _init_logging(level, subcommand):
     numeric_level = getattr(logging, level, None)
@@ -49,8 +49,8 @@ def main():
     subparsers = parser.add_subparsers(dest="subcommand")
 
     # init subparsers
-    for subcommand in didww_aptly_ctl.subcommands.__all__:
-        eval("didww_aptly_ctl.subcommands.%s.config_subparser(subparsers)" % subcommand)
+    for subcommand in aptly_ctl.subcommands.__all__:
+        eval("aptly_ctl.subcommands.%s.config_subparser(subparsers)" % subcommand)
 
     args = parser.parse_args()
 
@@ -70,7 +70,7 @@ def main():
     # init config
     try:
         config = Config(args.config, args.profile, args.config_keys)
-    except DidwwAptlyCtlError as e:
+    except AptlyCtlError as e:
         logger.error(e)
         logger.debug("", exc_info=True)
         sys.exit(127)
@@ -91,7 +91,7 @@ def main():
             sys.exit(128)
         else:
             raise
-    except (DidwwAptlyCtlError, requests.exceptions.RequestException) as e:
+    except (AptlyCtlError, requests.exceptions.RequestException) as e:
         logger.error(e)
         logger.debug("", exc_info=True)
         sys.exit(128)

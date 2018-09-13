@@ -1,8 +1,8 @@
 import logging
 from pprint import pprint
-from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils import PubSpec
+from aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.utils import PubSpec
 from aptly_api.base import AptlyAPIException
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ def update(config, args):
     try:
         p = PubSpec(args.name)
     except ValueError as e:
-        raise DidwwAptlyCtlError("PUB_SPEC '%s' invalid. See 'publish' subcommand --help" % args.name) from e
+        raise AptlyCtlError("PUB_SPEC '%s' invalid. See 'publish' subcommand --help" % args.name) from e
     s_cfg = config.get_signing_config(p).as_dict(prefix="sign_")
     try:
         result = aptly.publish.update(
@@ -93,7 +93,7 @@ def update(config, args):
                 )
     except AptlyAPIException as e:
         if e.status_code == 404:
-            raise DidwwAptlyCtlError(e) from e
+            raise AptlyCtlError(e) from e
         else:
             raise
     logger.debug("Api returned: " + str(result))
@@ -106,14 +106,14 @@ def publish(config, args):
     try:
         p = PubSpec(args.name)
     except ValueError as e:
-        raise DidwwAptlyCtlError("PUB_SPEC '%s' invalid. See 'publish' subcommand --help" % args.name) from e
+        raise AptlyCtlError("PUB_SPEC '%s' invalid. See 'publish' subcommand --help" % args.name) from e
     s_cfg = config.get_signing_config(p).as_dict(prefix="sign_")
     architectures = args.architectures.split(',')
     sources = []
     for s in args.sources:
         name, sep, comp = s.partition('=')
         if len(name) == 0:
-            raise DidwwAptlyCtlError
+            raise AptlyCtlError
         elif len(comp) == 0:
             sources.append({"Name": name})
         else:
@@ -131,7 +131,7 @@ def publish(config, args):
                 **s_cfg
                 )
     except AptlyAPIException as e:
-        raise DidwwAptlyCtlError(e) from e
+        raise AptlyCtlError(e) from e
     pprint_publish(result)
     return 0
 
@@ -141,11 +141,11 @@ def drop(config, args):
     try:
         p = PubSpec(args.name)
     except ValueError as e:
-        raise DidwwAptlyCtlError("PUB_SPEC '%s' invalid. See 'publish' subcommand --help" % args.name) from e
+        raise AptlyCtlError("PUB_SPEC '%s' invalid. See 'publish' subcommand --help" % args.name) from e
     s_cfg = config.get_signing_config(p).as_dict(prefix="sign_")
     try:
         aptly.publish.drop(prefix=p.prefix, distribution=p.distribution, force_delete=args.force)
     except AptlyAPIException as e:
-        raise DidwwAptlyCtlError(e) from e
+        raise AptlyCtlError(e) from e
     return 0
 

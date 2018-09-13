@@ -1,6 +1,6 @@
-from . context import didww_aptly_ctl
-from didww_aptly_ctl.Config import SigningConfig
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
+from . context import aptly_ctl
+from aptly_ctl.Config import SigningConfig
+from aptly_ctl.exceptions import AptlyCtlError
 import pytest
 
 class TestSigningConfig:
@@ -58,11 +58,11 @@ class TestSigningConfig:
         assert d == d_reference
 
     def test_signing_config_no_gpgkey(self):
-        with pytest.raises(DidwwAptlyCtlError):
+        with pytest.raises(AptlyCtlError):
             c = SigningConfig(skip=False, passphrase="password")
 
     def test_signing_config_both_passphrase_passphrase_file(self):
-        with pytest.raises(DidwwAptlyCtlError):
+        with pytest.raises(AptlyCtlError):
             c = SigningConfig(
                     skip=False,
                     gpgkey="xxx",
@@ -70,13 +70,13 @@ class TestSigningConfig:
                     passphrase_file="pass_file")
 
     def test_signing_config_none_passphrase_passphrase_file(self):
-        with pytest.raises(DidwwAptlyCtlError):
+        with pytest.raises(AptlyCtlError):
             c = SigningConfig(skip=False, gpgkey="xxx")
 
     def test_signing_config_skip_true(self):
         assert SigningConfig(skip=True) is not None
 
     def test_signing_config_unknown_key_arg(self):
-        with pytest.raises(DidwwAptlyCtlError) as e:
+        with pytest.raises(AptlyCtlError) as e:
             c = SigningConfig(skip=True, unknown="unknown")
         assert "unknown configuration keys: ['unknown=unknown']" in e.value.args[0].lower()

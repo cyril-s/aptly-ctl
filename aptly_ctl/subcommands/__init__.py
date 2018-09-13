@@ -1,4 +1,4 @@
-from didww_aptly_ctl.subcommands import (
+from aptly_ctl.subcommands import (
         put,
         remove,
         search,

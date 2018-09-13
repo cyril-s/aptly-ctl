@@ -1,7 +1,7 @@
 from functools import total_ordering
 import logging
 import re
-from didww_aptly_ctl.utils import Version
+from aptly_ctl.utils import Version
 
 logger = logging.getLogger(__name__)
 

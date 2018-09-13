@@ -1,7 +1,7 @@
-from . context import didww_aptly_ctl
+from . context import aptly_ctl
 from aptly_api.parts.packages import Package
-from didww_aptly_ctl.subcommands.search import rotate
-from didww_aptly_ctl.utils import PackageRef
+from aptly_ctl.subcommands.search import rotate
+from aptly_ctl.utils import PackageRef
 
 class TestSearchSubcommand:
 

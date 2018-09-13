@@ -1,9 +1,9 @@
 import logging
 import sys
 from aptly_api.base import AptlyAPIException
-from didww_aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
-from didww_aptly_ctl.exceptions import DidwwAptlyCtlError
-from didww_aptly_ctl.utils.PackageRef import PackageRef
+from aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
+from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.utils.PackageRef import PackageRef
 
 logger = logging.getLogger(__name__)
 
@@ -36,26 +36,26 @@ def remove(config, args):
             continue
         ref = PackageRef(r)
         if ref.repo is None:
-            raise DidwwAptlyCtlError("Remove subcommand requires that package ref containes repo name")
+            raise AptlyCtlError("Remove subcommand requires that package ref containes repo name")
         elif ref.key is None:
             # we got direct reference, gotta look up hash
             try:
                 ref_aptly_key = aptly.search_by_PackageRef(ref, use_ref_repo=True, detailed=False)
             except AptlyAPIException as e:
                 if e.status_code == 404:
-                    raise DidwwAptlyCtlError("When resolving direct reference '{}' to aptly key repo '{}' was not found".format(ref, ref.repo)) from e
+                    raise AptlyCtlError("When resolving direct reference '{}' to aptly key repo '{}' was not found".format(ref, ref.repo)) from e
                 else:
                     raise
             else:
                 if len(ref_aptly_key) != 1:
-                    raise DidwwAptlyCtlError("When resolving direct reference '{}' to aptly key API returned: {}".format(ref, ref_aptly_key))
+                    raise AptlyCtlError("When resolving direct reference '{}' to aptly key API returned: {}".format(ref, ref_aptly_key))
                 else:
                     all_refs.setdefault(ref.repo, list()).append(ref_aptly_key[0])
         else:
             all_refs.setdefault(ref.repo, list()).append(ref)
 
     if not all_refs:
-        raise DidwwAptlyCtlError("No reference were supplied. Nothing to remove.")
+        raise AptlyCtlError("No reference were supplied. Nothing to remove.")
 
     failed_repos = []
     for repo, refs in all_refs.items():
@@ -77,10 +77,10 @@ def remove(config, args):
             del all_refs[f] # no need to update publish sourced from this repo
 
     if not all_refs:
-        raise DidwwAptlyCtlError("Failed to remove anything.")
+        raise AptlyCtlError("Failed to remove anything.")
 
     update_exceptions = aptly.update_dependent_publishes(all_refs.keys(), config, args.dry_run)
     if len(update_exceptions) > 0:
-        raise DidwwAptlyCtlError("Some publishes fail to update")
+        raise AptlyCtlError("Some publishes fail to update")
     else:
         return 0
