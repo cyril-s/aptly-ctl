@@ -50,7 +50,13 @@ def search(config, args):
     for q in args.queries:
         logger.debug("Query: " + q)
         for r in repo_list:
-            search_result = aptly.repos.search_packages(r, q, args.with_deps, args.details)
+            try:
+                search_result = aptly.repos.search_packages(r, q, args.with_deps, args.details)
+            except AptlyAPIException as e:
+                if e.status_code == 404:
+                    raise DidwwAptlyCtlError(e) from e
+                else:
+                    raise
             logger.debug("For query '{}' in repo '{}' api returned: {}".format(q, r, search_result))
             search_result.sort(key=lambda s: PackageRef(s.key))
             for s in search_result:
