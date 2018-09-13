@@ -58,11 +58,11 @@ class TestSigningConfig:
         assert d == d_reference
 
     def test_signing_config_no_gpgkey(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(DidwwAptlyCtlError):
             c = SigningConfig(skip=False, passphrase="password")
 
     def test_signing_config_both_passphrase_passphrase_file(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(DidwwAptlyCtlError):
             c = SigningConfig(
                     skip=False,
                     gpgkey="xxx",
@@ -70,7 +70,7 @@ class TestSigningConfig:
                     passphrase_file="pass_file")
 
     def test_signing_config_none_passphrase_passphrase_file(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(DidwwAptlyCtlError):
             c = SigningConfig(skip=False, gpgkey="xxx")
 
     def test_signing_config_skip_true(self):

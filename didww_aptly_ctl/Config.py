@@ -31,9 +31,9 @@ class SigningConfig:
 
         if not skip:
             if not gpgkey:
-                raise ValueError("Config must contain 'gpgkey'. Do not rely on default key.")
+                raise DidwwAptlyCtlError("Config must contain 'gpgkey'. Do not rely on default key.")
             if (passphrase and passphrase_file) or (not passphrase and not passphrase_file):
-                raise ValueError("Config must contain either 'passphrase' or 'passphrase_file'.")
+                raise DidwwAptlyCtlError("Config must contain either 'passphrase' or 'passphrase_file'.")
         self._conf = {
                 "skip": skip,
                 "batch": batch,
@@ -143,8 +143,8 @@ class Config:
 
         try:
             self.url = config["url"]
-        except KeyError:
-            raise DidwwAptlyCtlError("Specify url of API to connect to.")
+        except KeyError as e:
+            raise DidwwAptlyCtlError("Specify url of API to connect to.") from e
 
 
     def get_signing_config(self, pub_spec=None):
@@ -169,25 +169,25 @@ class Config:
                         c = {}
                     logger.info('Loadded config from "%s"' % file)
             except yaml.YAMLError as e:
-                raise DidwwAptlyCtlError('Invalid YAML in "{}": {}'.format(file, e))
+                raise DidwwAptlyCtlError('Invalid YAML in "{}": {}'.format(file, e)) from e
             except OSError as e:
                 if e.errno in [errno.EACCES, errno.ENOENT, errno.EISDIR]:
                     if fail_fast or e.errno in [errno.EACCES, errno.EISDIR]:
-                        raise DidwwAptlyCtlError('Cannot load config from "{}": {}'.format(file, e.strerror))
+                        raise DidwwAptlyCtlError('Cannot load config from "{}": {}'.format(file, e.strerror)) from e
                     else:
                         logger.debug('Cannot load config from "{}": {}'.format(file, e.strerror))
                 else:
-                    raise e
+                    raise
         return c
 
 
     def _get_profile_cfg(self, cfg, profile):
         try:
             profile_list = [ cfg["profiles"][int(profile)] ]
-        except (KeyError, TypeError):
-            raise DidwwAptlyCtlError("Config file must contain 'profiles' list")
-        except IndexError:
-            raise DidwwAptlyCtlError("There is no profile numbered %s" % profile)
+        except (KeyError, TypeError) as e:
+            raise DidwwAptlyCtlError("Config file must contain 'profiles' list") from e
+        except IndexError as e:
+            raise DidwwAptlyCtlError("There is no profile numbered %s" % profile) from e
         except ValueError:
             profile_list = [ prof for prof in cfg["profiles"] if prof.get("name", "").startswith(profile) ]
 
