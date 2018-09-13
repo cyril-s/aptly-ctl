@@ -37,6 +37,20 @@ def remove(config, args):
         ref = PackageRef(r)
         if ref.repo is None:
             raise DidwwAptlyCtlError("Remove subcommand requires that package ref containes repo name")
+        elif ref.key is None:
+            # we got direct reference, gotta look up hash
+            try:
+                ref_aptly_key = aptly.search_by_PackageRef(ref, use_ref_repo=True, detailed=False)
+            except AptlyAPIException as e:
+                if e.status_code == 404:
+                    raise DidwwAptlyCtlError("When resolving direct reference '{}' to aptly key repo '{}' was not found".format(ref, ref.repo)) from e
+                else:
+                    raise
+            else:
+                if len(ref_aptly_key) != 1:
+                    raise DidwwAptlyCtlError("When resolving direct reference '{}' to aptly key API returned: {}".format(ref, ref_aptly_key))
+                else:
+                    all_refs.setdefault(ref.repo, list()).append(ref_aptly_key[0])
         else:
             all_refs.setdefault(ref.repo, list()).append(ref)
 

@@ -28,8 +28,13 @@ class ExtendedAptlyClient(Client):
             return dependent_pubs
 
 
-    def search_by_PackageRef(self, ref):
-        if ref.repo:
+    def search_by_PackageRef(self, ref, use_ref_repo=True, detailed=True):
+        """
+        Search for PackageRef in all repos. If use_ref_repo is True, search
+        only in repo of PackageRef if it is not None. Returns list of new PackageRefs
+        with hash set, and new attr details if detailed is True
+        """
+        if use_ref_repo and ref.repo:
             repos_list = [ ref.repo ]
         else:
             repos_list = [ r.name for r in self.repos.list() ]
@@ -45,7 +50,7 @@ class ExtendedAptlyClient(Client):
                 new_ref = PackageRef(search_result[0].key)
                 new_ref.repo = r
                 new_ref.details = search_result[0]
-                result.append()
+                result.append(new_ref)
         else:
             return result
 
