@@ -19,9 +19,10 @@ def config_subparser(subparsers_action_object):
     parser_search.add_argument("-r", "--repo", dest="repos", action="append",
             help="Limit search to specified repos.")
 
-    #parser_search.add_argument("-n", "--name", action="store_true",
-    #        help="Treat query as regex of package's name.")
+    parser_search.add_argument("-n", "--name", action="store_true",
+            help="Treat query as regex of package's name.")
 
+    #TODO
     #parser_search.add_argument("--pretty", action="store_true",
     #        help="Print more readable rather than parsable output.")
 
@@ -48,7 +49,9 @@ def search(config, args):
     logger.info("Searching in repos {}".format(", ".join(repo_list)))
 
     for q in args.queries:
-        logger.debug("Query: " + q)
+        if args.name:
+            q = "Name (~ {})".format(q)
+        logger.info("Query: " + q)
         for r in repo_list:
             try:
                 search_result = aptly.repos.search_packages(r, q, args.with_deps, args.details)
