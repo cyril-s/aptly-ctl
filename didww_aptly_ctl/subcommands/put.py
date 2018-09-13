@@ -33,7 +33,7 @@ def put(config, args):
         aptly.repos.show(args.repo)
     except AptlyAPIException as e:
         if e.status_code == 404:
-            raise DidwwAptlyCtlError("Local repo '%s' not found." % args.repo)
+            raise DidwwAptlyCtlError("Local repo '%s' not found." % args.repo) from e
         else:
             raise
 
@@ -42,7 +42,7 @@ def put(config, args):
         upload_result = aptly.files.upload(directory, *args.packages)
     except AptlyAPIException as e:
         if e.status_code == 0 and e.args[0].startswith("File to upload"):
-            raise DidwwAptlyCtlError(e)
+            raise DidwwAptlyCtlError(e) from e
         else:
             raise
     else:

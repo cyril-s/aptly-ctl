@@ -69,7 +69,7 @@ def create(config, args):
         create_result = aptly.repos.create(args.name, args.comment, args.dist, args.comp)
     except AptlyAPIException as e:
         if e.status_code == 400:
-            raise DidwwAptlyCtlError(e)
+            raise DidwwAptlyCtlError(e) from e
         else:
             raise
     else:
@@ -83,7 +83,7 @@ def edit(config, args):
         edit_result = aptly.repos.edit(args.name, args.comment, args.dist, args.comp)
     except AptlyAPIException as e:
         if e.status_code in [0, 404]:
-            raise DidwwAptlyCtlError(e)
+            raise DidwwAptlyCtlError(e) from e
         else:
             raise
     else:
@@ -97,7 +97,7 @@ def delete(config, args):
         aptly.repos.delete(args.name, args.force)
     except AptlyAPIException as e:
         if e.status_code in [404, 409]:
-            raise DidwwAptlyCtlError(e)
+            raise DidwwAptlyCtlError(e) from e
         else:
             raise
     else:

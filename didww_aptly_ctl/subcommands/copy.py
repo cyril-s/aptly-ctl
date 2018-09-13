@@ -42,7 +42,7 @@ def copy(config, args):
             logger.debug("add result: {}".format(add_result))
     except AptlyAPIException as e:
         if e.status_code in [400, 404]:
-            raise DidwwAptlyCtlError(e)
+            raise DidwwAptlyCtlError(e) from e
         else:
             raise
     else:
