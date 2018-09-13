@@ -32,6 +32,25 @@ def config_subparser(subparsers_action_object):
     parser_search.add_argument("--details", action="store_true",
             help="Return full information about each package (might be slow on large repos).")
 
+    parser_search.add_argument("--rotate", type=int, metavar="N",
+            help="N is a number of latest package versions to omit when printing a result. "
+                 "Output can be piped to remove subcommand to delete old versions. "
+                 "If N is negative, N latest packages would be shown.")
+
+
+def rotate(packages, n):
+    h = {}
+    for p in packages:
+        ref = PackageRef(p.key)
+        h.setdefault("{}{}{}".format(ref.prefix, ref.arch, ref.name), []).append(p)
+    for k, v in h.items():
+        v.sort(key=lambda s: PackageRef(s.key))
+        h[k] = v[:len(v)-n] if n >= 0 else v[len(v)+n:]
+    result = []
+    for a in h.values():
+        result += a
+    return result
+
 
 def search(config, args):
     aptly = ExtendedAptlyClient(config.url)
@@ -61,6 +80,8 @@ def search(config, args):
                 else:
                     raise
             logger.debug("For query '{}' in repo '{}' api returned: {}".format(q, r, search_result))
+            if args.rotate:
+                search_result = rotate(search_result, args.rotate)
             search_result.sort(key=lambda s: PackageRef(s.key))
             for s in search_result:
                 # print quotes too for convenient copy-pasting in terminal
