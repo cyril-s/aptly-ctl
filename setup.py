@@ -2,6 +2,11 @@
 
 from setuptools import setup, find_packages
 from aptly_ctl import __version__
+from os import path
+
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
 
 setup(
     name="aptly-ctl",
@@ -11,6 +16,8 @@ setup(
     author="Kirill Shestakov",
     author_email="freyr.sh@gmail.com",
     description="Convenient command line Aptly API client",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     url="https://github.com/cyril-s/aptly-ctl",
     install_requires=["aptly-api-client", "PyYAML", "requests"],
     python_requires=">=3",
