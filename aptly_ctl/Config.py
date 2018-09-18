@@ -101,6 +101,8 @@ class Config:
         ]
 
     try_files_system = [
+        "/etc/aptly-ctl.yml",
+        "/etc/aptly-ctl.yaml",
         "/etc/aptly-ctl.conf",
         ]
 
