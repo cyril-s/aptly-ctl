@@ -8,34 +8,38 @@ logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     parser_search = subparsers_action_object.add_parser("search",
-            help="Search packages in local repos.",
-            description="Search packages in local repos.")
+            help="search packages in local repos",
+            description="""
+            Search packages in local repos and print found package_references to STDOUT.
+            Output can be piped to copy or reomove subcommands. Use --rotate flag and pipe
+            STDOUT to remove subcommand to delete old versions of packages from your repo.
+            """)
     parser_search.set_defaults(func=search)
 
     parser_search.add_argument("queries", metavar="query", nargs="*",
-            help="Query in format documented at https://www.aptly.info/doc/feature/query/."
+            help="query in format documented at https://www.aptly.info/doc/feature/query/."
                  " No query means list everything.")
 
     parser_search.add_argument("-r", "--repo", dest="repos", action="append",
-            help="Limit search to specified repos.")
+            help="limit search to specified repos. Can be specified multiple times")
 
     parser_search.add_argument("-n", "--name", action="store_true",
-            help="Treat query as regex of package's name.")
+            help="treat query as regex of package's name")
 
     #TODO
     #parser_search.add_argument("--pretty", action="store_true",
     #        help="Print more readable rather than parsable output.")
 
     parser_search.add_argument("--with-deps", action="store_true",
-            help="Include dependencies (that are in the same repo)  when evaluating package query.")
+            help="include dependencies (that are in the same repo) when evaluating package query")
 
     parser_search.add_argument("--details", action="store_true",
-            help="Return full information about each package (might be slow on large repos).")
+            help="return full information about each package (might be slow on large repos)")
 
     parser_search.add_argument("--rotate", type=int, metavar="N",
             help="N is a number of latest package versions to omit when printing a result. "
                  "Output can be piped to remove subcommand to delete old versions. "
-                 "If N is negative, N latest packages would be shown.")
+                 "If N is negative, N latest packages would be shown")
 
 
 def rotate(packages, n):

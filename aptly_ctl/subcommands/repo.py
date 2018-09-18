@@ -9,34 +9,42 @@ logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     parser_repo = subparsers_action_object.add_parser("repo",
-            help="Administer local repos",
-            description="Administer local repos")
+            help="administer local repos",
+            description="Administer local repos.")
     subparsers = parser_repo.add_subparsers()
 
-    parser_list = subparsers.add_parser("list", help="List local repos")
+    parser_list = subparsers.add_parser("list",
+            help="list local repos",
+            description="List local repos names to STDOUT.")
     parser_list.set_defaults(func=list)
     parser_list.add_argument("--detail", action="store_true",
-            help="Print additional details when showing and listing")
+            help="print additional details when showing and listing")
 
-    parser_create = subparsers.add_parser("create", help="Create a local rep")
+    parser_create = subparsers.add_parser("create",
+            help="create a local repo",
+            description="Create a local repo.")
     parser_create.set_defaults(func=create)
-    parser_create.add_argument("name", help="Name of new repo")
-    parser_create.add_argument("--comment", help="Text describing local repository for a user")
-    parser_create.add_argument("--dist", help="Default distribution when publishing from this local repo")
-    parser_create.add_argument("--comp", help="Default component when publishing from this local repo")
+    parser_create.add_argument("name", help="name of a new repo")
+    parser_create.add_argument("--comment", help="text describing local repository for a user")
+    parser_create.add_argument("--dist", help="default distribution when publishing from this local repo")
+    parser_create.add_argument("--comp", help="default component when publishing from this local repo")
 
-    parser_edit = subparsers.add_parser("edit", help="Edit a local repo")
+    parser_edit = subparsers.add_parser("edit",
+            help="edit a local repo",
+            description="Edit a local repo.")
     parser_edit.set_defaults(func=edit)
-    parser_edit.add_argument("name", help="Name of a repo")
-    parser_edit.add_argument("--comment", help="Text describing local repository for a user")
-    parser_edit.add_argument("--dist", help="Default distribution when publishing from this local repo")
-    parser_edit.add_argument("--comp", help="Default component when publishing from this local repo")
+    parser_edit.add_argument("name", help="name of a repo")
+    parser_edit.add_argument("--comment", help="text describing local repository for a user")
+    parser_edit.add_argument("--dist", help="default distribution when publishing from this local repo")
+    parser_edit.add_argument("--comp", help="default component when publishing from this local repo")
 
-    parser_delete = subparsers.add_parser("delete", help="Delete a local repo")
+    parser_delete = subparsers.add_parser("delete",
+            help="delete a local repo",
+            description="Delete a local repo.")
     parser_delete.set_defaults(func=delete)
-    parser_delete.add_argument("name", help="Name of a repo")
+    parser_delete.add_argument("name", help="name of a repo")
     parser_delete.add_argument("-f", "--force", action="store_true",
-            help="Delete local repository even if it has snapshots")
+            help="delete local repository even if it has snapshots")
 
 
 def pprint_repo(repo, packages=[]):

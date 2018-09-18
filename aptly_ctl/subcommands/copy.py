@@ -9,18 +9,23 @@ logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     parser_copy = subparsers_action_object.add_parser("copy",
-            description="Copy packages between local repos and update dependent publishes.",
-            help="Copy packages between local repos and update dependent publishes.")
+            help="copy packages between local repos",
+            description="""
+            Copy packages between local repos and update dependent publishes.
+            STDOUT is new package_references in target repo. You can pipe it to
+            remove subcommand to delete them immediately or to copy subcommand
+            to copy them again.
+            """)
     parser_copy.set_defaults(func=copy)
 
     parser_copy.add_argument("--dry-run", action="store_true",
-            help="Don't do anything, just show what is to be done")
+            help="don't do anything, just show what is to be done")
 
     parser_copy.add_argument("-t", "--target", required=True,
-            help="Target repo name.")
+            help="target repo name.")
 
     parser_copy.add_argument("refs", metavar="package_referece", nargs="*",
-            help="Package reference. If no refs are supplied stdin is read.")
+            help="package reference (see 'aplty-ctl --help'). If no refs are supplied stdin is read")
 
 
 def copy(config, args):

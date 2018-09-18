@@ -9,18 +9,21 @@ logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     parser_put = subparsers_action_object.add_parser("put",
-            description="Put packages in local repos and update dependent publishes.",
-            help="Put packages in local repos and update dependent publishes.")
+            help="put packages in local repos",
+            description="""
+            Put packages in local repos and update dependent publishes.
+            STDOUT is a list of newly uploaded package_references
+            """)
 
     parser_put.set_defaults(func=put)
     parser_put.add_argument("repo",
-        help="Destination repository name.")
+        help="destination repository name")
 
     parser_put.add_argument("packages", metavar="package", nargs="*",
-        help="Pakcages to upload. If omitted, file paths are read from stdin.")
+        help="pakcages to upload. If omitted, file paths are read from STDIN")
 
     parser_put.add_argument("-f", "--force-replace", action="store_true",
-        help="Remove packages conflicting with package being added.")
+        help="remove packages conflicting with package being added")
 
 
 def put(config, args):

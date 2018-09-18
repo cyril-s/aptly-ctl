@@ -9,19 +9,18 @@ logger = logging.getLogger(__name__)
 
 def config_subparser(subparsers_action_object):
     parser_remove = subparsers_action_object.add_parser("remove",
-            description="Remove packages from local repos and update dependent publishes.",
-            help="Remove packages from local repos and update dependent publishes.")
+            help="remove packages from local repos",
+            description="""
+            Remove packages from local repos and update dependent publishes.
+            STDOUT is a list of package_references that are FAILED to remove
+            """)
     parser_remove.set_defaults(func=remove)
 
-    parser_remove.add_argument("refs", metavar="repo/package_referece", nargs="*",
-            help="""repo is a repo name from where to remove package,
-                    and package_reference is either an aplty key of a package
-                    (e.g. 'Pi386 libboost-program-options-dev 1.49.0.1 918d2f433384e378')
-                    or direct reference (e.g. libboost-program-options-dev_1.49.0.1_i386).
-                    If no refs are supplied stdin is read.""")
+    parser_remove.add_argument("refs", metavar="package_referece", nargs="*",
+            help="package reference. For details see 'aptly-ctl --help'")
 
     parser_remove.add_argument("--dry-run", action="store_true",
-            help="Do not delete packages or update publish. Just validate actions and show what is to be done")
+            help="do not actually delete packages or update publish")
 
 
 def remove(config, args):

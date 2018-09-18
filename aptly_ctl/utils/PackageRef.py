@@ -10,7 +10,7 @@ class PackageRef:
     """
     Represents reference to package in Aptly repostitory.
     Can be built from such refs:
-    aplty key: "[<prefix>]P<arch> <name> <version>[ <hash>]",
+    aplty key: "[<prefix>]P<arch> <name> <version> <hash>",
     direct ref: "<name>_<arch>_<version>".
     Repo can in specified in reference: "<repo>/<reference>".
     In reference with version <repo> takes presendence on repo argument.

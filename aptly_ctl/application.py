@@ -28,27 +28,56 @@ def _init_logging(level, subcommand):
 
 
 def main():
+
+    description = \
+    """
+    aptly-ctl -- is a convenient aptly API  command line client.  For details on
+    aptly see  https://www.aptly.info/.  This tool uses some notations that help
+    tool to interact with itself. Here are they.
+
+    package_reference form is  [<repository>/]{<aptly key>, <direct reference>}.
+
+    <aptly key> is in the form "P<arch> <name> <version> <hash>" e.g.
+    "Pamd64 aptly 2.2.2 1234567890123456".
+
+    <direct reference> form is "<name>_<arch>_<version>" e.g. aptly_amd64_2.2.2.
+    <repository>  is  a local  repo  name  precising packge  location  and it is
+    optional.  However some subcommands may require it for correct operation and
+    they will mention that.
+
+    PUB_SPEC is in the form "[<storage>:]<prefix>/<distribution>" and it is used
+    to  specify   publishes.   See  https://www.aptly.info/doc/api/publish/  for
+    details and NOTE, you don't have to substitute '/', '.' and '_' here.
+
+    Various subcommands accept package_references and PUB_SPEC from command line
+    or on stdin, and print them on stdout, which allows interaction between them
+    through pipe. Subcommands' --help will mention what they print to STDOUT and
+    what they can read from STDIN and give you some hints how you can "pipe" it.
+
+    Generally  STDOUT  will be  parsable by other  subcommands  or absent and no
+    messages  will  be  printed  to  STDERR  (to  change  this  us  '-v'  flag).
+    So no output is a success.\
+    """
+
     parser = argparse.ArgumentParser(prog=__progName__,
-            description="Convenient Aptly API client.")
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=description)
 
     parser.add_argument("-p", "--profile", default="0",
-            help="Profile from config file. Can be it's name or number. Default is the first one.")
+            help="profile from config file. Can be it's name or number. Default is the first one")
 
-    parser.add_argument("-c", "--config",
-            help="Path to config file. Default is $HOME/.config/aptly-ctl.conf, "
-                 "and then /etc/aptly-ctl.conf")
+    parser.add_argument("-c", "--config", help="path to config file")
 
     parser.add_argument("-C", "--config-keys", metavar="KEY", action="append", default=[],
-            help="Override key value in config for chosen profile.")
+            help="override key value in config for chosen profile")
 
     parser.add_argument("-v", "--verbose", action="count", default=0,
-            help="Increase verbosity")
+            help="increase verbosity. Can be set mutiple times to increase verbosity even more")
 
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
 
     subparsers = parser.add_subparsers(dest="subcommand")
 
-    # init subparsers
     for subcommand in aptly_ctl.subcommands.__all__:
         eval("aptly_ctl.subcommands.%s.config_subparser(subparsers)" % subcommand)
 
@@ -58,7 +87,6 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # set up logging
     log_level = VERBOSITY[min(args.verbose, len(VERBOSITY) - 1)]
     try:
         _init_logging(log_level, args.subcommand)
@@ -67,7 +95,6 @@ def main():
         sys.exit(1)
     logger = logging.getLogger(__name__)
 
-    # init config
     try:
         config = Config(args.config, args.profile, args.config_keys)
     except AptlyCtlError as e:
@@ -75,12 +102,10 @@ def main():
         logger.debug("", exc_info=True)
         sys.exit(127)
 
-    # check version comparios from python3-apt module
     if not system_ver_compare:
         logger.debug("Cannot import apt.apt_pkg module from python3-apt" \
                 + " package. Using python substitute that is much slower.")
 
-    # run subcommand
     logger.info("Running %s subcommand." % args.subcommand)
     try:
         sys.exit(args.func(config, args))
