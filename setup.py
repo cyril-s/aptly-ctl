@@ -11,8 +11,8 @@ setup(
     author="Kirill Shestakov",
     author_email="freyr.sh@gmail.com",
     description="Convenient command line Aptly API client",
+    url="https://github.com/cyril-s/aptly-ctl",
     install_requires=["aptly-api-client", "PyYAML", "requests"],
-    tests_require=["pytest"],
     python_requires=">=3",
     entry_points={
         "console_scripts":
@@ -20,7 +20,8 @@ setup(
     },
     classifiers=[
         "Development Status :: 3 - Alpha",
-        "Programming Language :: Python :: 3",
-    ],
-
+        "Programming Language :: Python :: 3 :: Only",
+        "Environment :: Console",
+        "License :: OSI Approved :: MIT License",
+    ]
 )
