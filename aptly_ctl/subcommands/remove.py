@@ -35,7 +35,7 @@ def remove(config, args):
             continue
         ref = PackageRef(r)
         if ref.repo is None:
-            raise AptlyCtlError("Remove subcommand requires that package ref containes repo name")
+            raise AptlyCtlError("Invalid package reference '%s'. Repo name is required." % ref)
         elif ref.key is None:
             # we got direct reference, gotta look up hash
             try:
@@ -59,7 +59,8 @@ def remove(config, args):
     failed_repos = []
     for repo, refs in all_refs.items():
         try:
-            delete_result = aptly.repos.delete_packages_by_key(repo, *[r.key for r in refs])
+            if not args.dry_run:
+                delete_result = aptly.repos.delete_packages_by_key(repo, *[r.key for r in refs])
         except AptlyAPIException as e:
             logger.error(e)
             logger.debug("", exc_info=True)
@@ -70,7 +71,8 @@ def remove(config, args):
         else:
             for r in refs:
                 logger.info('Removed "{}" from {}'.format(r, repo))
-            logger.debug("API returned: " + str(delete_result))
+            if not args.dry_run:
+                logger.debug("API returned: " + str(delete_result))
     else:
         for f in failed_repos:
             del all_refs[f] # no need to update publish sourced from this repo
