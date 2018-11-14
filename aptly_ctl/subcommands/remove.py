@@ -36,7 +36,7 @@ def remove(config, args):
         ref = PackageRef(r)
         if ref.repo is None:
             raise AptlyCtlError("Invalid package reference '%s'. Repo name is required." % ref)
-        elif ref.key is None:
+        elif ref.hash is None:
             # we got direct reference, gotta look up hash
             try:
                 ref_aptly_key = aptly.search_by_PackageRef(ref, use_ref_repo=True, detailed=False)

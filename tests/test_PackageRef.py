@@ -79,9 +79,11 @@ class TestPackageRef:
         r.repo = "extra"
         assert r.repo == "extra"
 
-    def test_key_returns_None_if_no_hash_available(self):
-        r = PackageRef("aptly_2.2.0~rc5_amd64")
-        assert r.key is None
+    def test_key_throws_exception_if_no_hash_available(self):
+        with pytest.raises(TypeError) as e:
+            r = PackageRef("aptly_2.2.0~rc5_amd64")
+            key = r.key
+        assert "cannot build aptly key becuse hash is empty" in e.value.args[0].lower()
 
     def test_str_returns_dir_ref_if_no_hash_available(self):
         r = PackageRef("main/aptly_2.2.0~rc5_amd64")
@@ -90,6 +92,14 @@ class TestPackageRef:
     def test_repr_returns_dir_ref_if_no_hash_available(self):
         r = PackageRef("main/aptly_2.2.0~rc5_amd64")
         assert repr(r) == "main/aptly_2.2.0~rc5_amd64"
+
+    def test_str_returns_aptly_key_if_hash_is_available(self):
+        r = PackageRef("Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")
+        assert str(r) == "Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"
+
+    def test_repr_returns_aptly_key_if_hash_is_available(self):
+        r = PackageRef("Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")
+        assert repr(r) == "Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c"
 
     def test_repr_return_repo_if_it_is_available(self):
         r = PackageRef("main/Pamd64 aptly 2.2.0~rc5 f2b7dc2061b9d95c")

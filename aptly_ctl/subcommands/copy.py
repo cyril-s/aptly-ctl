@@ -12,9 +12,9 @@ def config_subparser(subparsers_action_object):
             help="copy packages between local repos",
             description="""
             Copy packages between local repos and update dependent publishes.
-            STDOUT is new package_references in target repo. You can pipe it to
-            remove subcommand to delete them immediately or to copy subcommand
-            to copy them again.
+            STDOUT is a new package_references of the form <repository>/<aptly key>
+            in target repo. You can pipe it to remove subcommand to delete them
+            immediately or to copy subcommand to copy them again.
             """)
     parser_copy.set_defaults(func=copy)
 
@@ -24,8 +24,8 @@ def config_subparser(subparsers_action_object):
     parser_copy.add_argument("-t", "--target", required=True,
             help="target repo name.")
 
-    parser_copy.add_argument("refs", metavar="package_referece", nargs="*",
-            help="package reference (see 'aplty-ctl --help'). If no refs are supplied stdin is read")
+    parser_copy.add_argument("keys", metavar="<repository>/<aptly key>", nargs="*",
+            help="aptly key with local repo name (see 'aplty-ctl --help'). If no refs are supplied stdin is read")
 
 
 def copy(config, args):
@@ -35,7 +35,12 @@ def copy(config, args):
 
     for r in map(lambda line: line.strip(' \t\r\n"\''), input_refs):
         if r != "":
-            refs.append(PackageRef(r).key)
+            p = PackageRef(r)
+            try:
+                key = p.key
+            except TypeError as e:
+                raise AptlyCtlError('Incorrect aptly key "{}": {}'.format(r, e))
+            refs.append(key)
 
     if not refs:
         raise AptlyCtlError("No reference were supplied. Nothing to copy.")

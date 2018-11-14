@@ -45,6 +45,9 @@ def main():
     optional.  However some subcommands may require it for correct operation and
     they will mention that.
 
+    If a subcommand needs some particular form of  package_reference  (e.g needs
+    only <repository>/<aptly key>), then it states that explicitly.
+
     PUB_SPEC is in the form "[<storage>:]<prefix>/<distribution>" and it is used
     to  specify   publishes.   See  https://www.aptly.info/doc/api/publish/  for
     details and NOTE, you don't have to substitute '/', '.' and '_' here.

@@ -70,11 +70,10 @@ class PackageRef:
     @property
     def key(self):
         "Return either aptly key if hash is not empty or None if it is"
-        if self.hash:
-            p = self.prefix if self.prefix else ""
-            return "{}P{} {} {} {}".format(p, self.arch, self.name, self.version, self.hash)
-        else:
-            return None
+        if not self.hash:
+            raise TypeError("Cannot build aptly key becuse hash is empty")
+        p = self.prefix if self.prefix else ""
+        return "{}P{} {} {} {}".format(p, self.arch, self.name, self.version, self.hash)
 
     @property
     def dir_ref(self):
