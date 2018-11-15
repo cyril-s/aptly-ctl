@@ -3,7 +3,7 @@ from datetime import datetime
 from aptly_api.base import AptlyAPIException
 from aptly_ctl.utils.ExtendedAptlyClient import ExtendedAptlyClient
 from aptly_ctl.exceptions import AptlyCtlError
-from aptly_ctl.utils.PackageRef import PackageRef
+from aptly_ctl.utils import PackageRef, PackageFile
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,13 @@ def put(config, args):
         else:
             raise
 
+    packages = []
+    for p in args.packages:
+        try:
+            packages.append(PackageFile(p))
+        except OSError as e:
+            raise AptlyCtlError("Failed to load package: {}".format(e))
+
     logger.info('Uploading the packages to directory "%s"' % directory)
     try:
         upload_result = aptly.files.upload(directory, *args.packages)
@@ -69,7 +76,19 @@ def put(config, args):
         logger.info('Removed "%s"' % f)
     logger.debug("Package add 'Added' section: %s" % add_result.report["Added"])
     for f in add_result.report["Added"]:
-        print('"' + repr(PackageRef(args.repo + "/" + f.split()[0])) + '"')
+        # renamed deb packages won't be displayed
+        dir_ref = f.split()[0]
+        filename = dir_ref + ".deb"
+        orig_file = [ p for p in packages if p.filename == filename ]
+        if len(orig_file) == 0:
+            # probably original deb file was renamed
+            logger.warn('For added package "{}" there were no match in original deb files'.format(dir_ref))
+        else:
+            if len(orig_file) >= 1:
+                logger.warn('For added package "{}" there were more than one match in original deb files: {}'.format(dir_ref, orig_file))
+                added_ref = PackageRef(args.repo + "/" + dir_ref)
+                added_ref.hash = format(orig_file[0].ahash, 'x')
+                print('"{!r}"'.format(added_ref))
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")

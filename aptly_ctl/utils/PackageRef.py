@@ -67,6 +67,13 @@ class PackageRef:
     def hash(self):
         return self._fields["hash"]
 
+    @hash.setter
+    def hash(self, value):
+        if self.hash is None:
+            self._fields["hash"] = value
+        else:
+            raise AttributeError("Failed to overvrite existing hash {} with new {}".format(self.hash, value))
+
     @property
     def key(self):
         "Return either aptly key if hash is not empty or None if it is"
