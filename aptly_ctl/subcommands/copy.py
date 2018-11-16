@@ -25,12 +25,12 @@ def config_subparser(subparsers_action_object):
             help="target repo name.")
 
     parser_copy.add_argument("keys", metavar="<repository>/<aptly key>", nargs="*",
-            help="aptly key with local repo name (see 'aplty-ctl --help'). If no refs are supplied stdin is read")
+            help="aptly key with local repo name (see 'aplty-ctl --help'). If no keys are supplied stdin is read")
 
 
 def copy(config, args):
     aptly = ExtendedAptlyClient(config.url)
-    input_refs = iter(args.refs) if len(args.refs) > 0 else sys.stdin
+    input_refs = iter(args.keys) if len(args.keys) > 0 else sys.stdin
     refs = []
 
     for r in map(lambda line: line.strip(' \t\r\n"\''), input_refs):
