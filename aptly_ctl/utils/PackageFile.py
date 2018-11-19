@@ -1,13 +1,12 @@
 import logging
 import hashlib
 from os.path import basename, abspath, realpath
-import pyhash
+from fnvhash import fnv1a_64
 
 logger = logging.getLogger(__name__)
 
 class PackageFile:
 
-    fnv_offset_basis64 = 14695981039346656037
     read_buffer_size = 1024 * 1024
 
     def __init__(self, filepath):
@@ -30,14 +29,13 @@ class PackageFile:
 
     @property
     def ahash(self):
-        h = pyhash.fnv1a_64()
         data = b''
         data += bytes(self.filename, "ascii")
         data += self.size.to_bytes(8, 'big')
         data += bytes(self.md5, "ascii")
         data += bytes(self.sha1, "ascii")
         data += bytes(self.sha256, "ascii")
-        digest = h(data, seed=self.fnv_offset_basis64)
+        digest = fnv1a_64(data)
         return digest
 
     def __str__(self):

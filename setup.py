@@ -19,7 +19,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/cyril-s/aptly-ctl",
-    install_requires=["aptly-api-client", "PyYAML", "requests", "pyhash"],
+    install_requires=["aptly-api-client", "PyYAML", "requests", "fnvhash"],
     python_requires=">=3",
     entry_points={
         "console_scripts":
