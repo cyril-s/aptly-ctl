@@ -106,23 +106,18 @@ $ aptly-ctl remove \
 ```
 Verbosely upload packages from local file system to aptly, add them to specified repo and update it's publish:
 ```bash
-$ aptly-ctl -v put stretch_main packages/nginx-full_1.13.*
+$ aptly-ctl -v put stretch_main packages/*
 INFO put(6860) Loadded config from "/etc/aptly-ctl.yml"
 INFO put(6860) Running put subcommand.
 INFO put(6860) Uploading the packages to directory "stretch_main_1537258123"
 INFO put(6860) Deleting directory 'stretch_main_1537258123'.
-"stretch_main/nginx-full_1.13.4-1_amd64"
-"stretch_main/nginx-full_1.13.4-1_i386"
-"stretch_main/nginx-full_1.13.5-1_amd64"
-"stretch_main/nginx-full_1.13.5-1_i386"
-"stretch_main/nginx-full_1.13.6-1_amd64"
-"stretch_main/nginx-full_1.13.6-1_i386"
-"stretch_main/nginx-full_1.13.6-2_amd64"
-"stretch_main/nginx-full_1.13.6-2_i386"
+"stretch_main/Pamd64 libnginx-mod-http-auth-pam 1.12.0 78c35d6a10bead1"
+"stretch_main/Pamd64 libnginx-mod-http-cache-purge 1.12.0 ffe2d6f3c00a1dbe"
+"stretch_main/Pamd64 libnginx-mod-http-dav-ext 1.12.0 1d4bed1e2358a7ad"
 INFO put(6860) Updating publish with prefix ".", dist "stretch"
 INFO put(6860) Updated publish with prefix ".", dist "stretch".
 ```
-Upload packages without config file (i.e. from CI server):
+Upload packages without config file (e.g. from CI server):
 ```bash
 $ aptly-ctl \
 -C "url=http://user:pass@repo.example.org:8090/api" \
@@ -153,9 +148,9 @@ extra/stretch
     Source kind: local
     Prefix: extra
     Distribution: stretch
-    Storage: 
-    Label: 
-    Origin: 
+    Storage:
+    Label:
+    Origin:
     Architectures: amd64
     Sources:
         stretch_extra (extra)
