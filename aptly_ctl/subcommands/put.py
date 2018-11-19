@@ -84,11 +84,11 @@ def put(config, args):
             # probably original deb file was renamed
             logger.warn('For added package "{}" there were no match in original deb files'.format(dir_ref))
         else:
-            if len(orig_file) >= 1:
+            if len(orig_file) > 1:
                 logger.warn('For added package "{}" there were more than one match in original deb files: {}'.format(dir_ref, orig_file))
-                added_ref = PackageRef(args.repo + "/" + dir_ref)
-                added_ref.hash = format(orig_file[0].ahash, 'x')
-                print('"{!r}"'.format(added_ref))
+            added_ref = PackageRef(args.repo + "/" + dir_ref)
+            added_ref.hash = format(orig_file[0].ahash, 'x')
+            print('"{!r}"'.format(added_ref))
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
         logger.warn("Skipping publish update.")
