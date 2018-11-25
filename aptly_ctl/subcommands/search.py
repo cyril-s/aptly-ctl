@@ -41,6 +41,9 @@ def config_subparser(subparsers_action_object):
                  "Output can be piped to remove subcommand to delete old versions. "
                  "If N is negative, N latest packages would be shown")
 
+    parser_search.add_argument("--dir-refs", action="store_true",
+            help="print direct references in stdout")
+
 
 def rotate(packages, n):
     h = {}
@@ -92,7 +95,10 @@ def search(config, args):
             search_result.sort(key=lambda s: PackageRef(s.key))
             for s in search_result:
                 # print quotes too for convenient copy-pasting in terminal
-                print('"{}/{}"'.format(r, s.key))
+                if args.dir_refs:
+                    print('"{}/{}"'.format(r, PackageRef(s.key).dir_ref))
+                else:
+                    print('"{}/{}"'.format(r, s.key))
                 if args.details:
                     for k, v in s.fields.items():
                         print(" "*4 + "{}: {}".format(k, v))
