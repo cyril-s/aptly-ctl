@@ -27,7 +27,7 @@ def _init_logging(level, subcommand):
         urllib3_logger.addHandler(app_handler)
 
 
-def main():
+def config_parser():
 
     description = \
     """
@@ -80,7 +80,11 @@ def main():
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
 
     subparsers = parser.add_subparsers(dest="subcommand")
+    return (parser, subparsers)
 
+
+def main():
+    parser, subparsers = config_parser()
     for subcommand in aptly_ctl.subcommands.__all__:
         eval("aptly_ctl.subcommands.%s.config_subparser(subparsers)" % subcommand)
 
@@ -88,14 +92,14 @@ def main():
 
     if not args.subcommand:
         parser.print_help()
-        sys.exit(1)
+        sys.exit(2)
 
     log_level = VERBOSITY[min(args.verbose, len(VERBOSITY) - 1)]
     try:
         _init_logging(log_level, args.subcommand)
     except ValueError as e:
         print(e)
-        sys.exit(1)
+        sys.exit(2)
     logger = logging.getLogger(__name__)
 
     try:
@@ -103,7 +107,7 @@ def main():
     except AptlyCtlError as e:
         logger.error(e)
         logger.debug("", exc_info=True)
-        sys.exit(127)
+        sys.exit(2)
 
     if not system_ver_compare:
         logger.debug("Cannot import apt.apt_pkg module from python3-apt" \
@@ -116,10 +120,10 @@ def main():
         if e.status_code == 404 and "page not found" in e.args[0].lower():
             logger.error("API reponded with '%s'. Check configured API url and run command with -vv to see failed request details." % e.args[0])
             logger.debug("", exc_info=True)
-            sys.exit(128)
+            sys.exit(1)
         else:
             raise
     except (AptlyCtlError, requests.exceptions.RequestException) as e:
         logger.error(e)
         logger.debug("", exc_info=True)
-        sys.exit(128)
+        sys.exit(1)
