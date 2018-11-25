@@ -79,8 +79,11 @@ def search(config, args):
             try:
                 search_result = aptly.repos.search_packages(r, q, args.with_deps, args.details)
             except AptlyAPIException as e:
-                if e.status_code == 404:
+                if e.status_code == 404: # local repo not found
                     raise AptlyCtlError(e) from e
+                elif e.status_code == 400 and "parsing failed:" in e.args[0].lower():
+                    _, _, parsing_fail_description = e.args[0].partition(":")
+                    raise AptlyCtlError('Bad query "{}": {}'.format(q, parsing_fail_description.strip()))
                 else:
                     raise
             logger.debug("For query '{}' in repo '{}' api returned: {}".format(q, r, search_result))
