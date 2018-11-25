@@ -35,6 +35,22 @@ class TestConfig:
                 }
             },
             {
+                "name": "prefix",
+                "url": "http://localhost:8071/api",
+                "signing": {
+                    "gpgkey": "xxxxxxxxx",
+                    "passphrase": "xxxxxxxxx"
+                }
+            },
+            {
+                "name": "prefix2",
+                "url": "http://localhost:8072/api",
+                "signing": {
+                    "gpgkey": "zzzzzzzzz",
+                    "passphrase": "zzzzzzzzz"
+                }
+            },
+            {
                 "name": "with_signing_overrides",
                 "url": "http://somehost:8090/api",
                 "signing": {
@@ -124,6 +140,11 @@ class TestConfig:
         with pytest.raises(AptlyCtlError) as e:
             c = Config(goodConfigPath, "profile")
         assert "ambiguously matches" in e.value.args[0].lower()
+
+    def test_config_init_set_profile_ambiguous_name_but_matches_fully(self, goodConfigPath):
+        c = Config(goodConfigPath, "prefix")
+        assert c.name == "prefix"
+        assert c.url == self._goodConfig["profiles"][3]["url"]
 
     def test_config_init_set_profile_wrong_name(self, goodConfigPath):
         with pytest.raises(AptlyCtlError) as e:

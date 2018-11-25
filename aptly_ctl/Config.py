@@ -196,7 +196,11 @@ class Config:
         if len(profile_list) == 0:
             raise AptlyCtlError('Cannot find configuration profile "%s"' % profile)
         elif len(profile_list) > 1:
-            raise AptlyCtlError('Profile "{}" ambiguously matches {}'.format(profile, profile_list))
+            exact_match = [prof for prof in profile_list if prof.get("name", "") == profile ]
+            if len(exact_match) == 1:
+                return exact_match[0]
+            else:
+                raise AptlyCtlError('Profile "{}" ambiguously matches {}'.format(profile, profile_list))
         else:
             return profile_list[0]
 
