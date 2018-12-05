@@ -67,10 +67,10 @@ def put(config, args):
 
     logger.debug("Package add failed files: %s" % add_result.failed_files)
     for f in add_result.failed_files:
-        logger.warn('"Failed to add package "%s"' % f)
+        logger.warning('"Failed to add package "%s"' % f)
     logger.debug("Package add warnings: %s" % add_result.report["Warnings"])
     for f in add_result.report["Warnings"]:
-        logger.warn(f)
+        logger.warning(f)
     logger.debug("Package add 'Removed' section: %s" % add_result.report["Removed"])
     for f in add_result.report["Removed"]:
         logger.info('Removed "%s"' % f)
@@ -82,16 +82,16 @@ def put(config, args):
         orig_file = [ p for p in packages if p.filename == filename ]
         if len(orig_file) == 0:
             # probably original deb file was renamed
-            logger.warn('For added package "{}" there were no match in original deb files'.format(dir_ref))
+            logger.warning('For added package "{}" there were no match in original deb files'.format(dir_ref))
         else:
             if len(orig_file) > 1:
-                logger.warn('For added package "{}" there were more than one match in original deb files: {}'.format(dir_ref, orig_file))
+                logger.warning('For added package "{}" there were more than one match in original deb files: {}'.format(dir_ref, orig_file))
             added_ref = PackageRef(args.repo + "/" + dir_ref)
             added_ref.hash = format(orig_file[0].ahash, 'x')
             print('"{!r}"'.format(added_ref))
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
-        logger.warn("Skipping publish update.")
+        logger.warning("Skipping publish update.")
         raise AptlyCtlError("Nothing added or removed.")
 
     update_exceptions = aptly.update_dependent_publishes([args.repo], config)

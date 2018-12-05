@@ -112,7 +112,7 @@ class Config:
                 for i in range(len(self.try_files_home)):
                     self.try_files_home[i] = self.try_files_home[i].format(home=os.environ["HOME"])
             else:
-                logger.warn("Could not get $HOME.")
+                logger.warning("Could not get $HOME.")
                 self.try_files_home = []
             try_files = self.try_files_home + self.try_files_system
         elif cfg_path is False:
