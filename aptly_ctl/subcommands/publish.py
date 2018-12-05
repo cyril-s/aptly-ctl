@@ -86,6 +86,7 @@ def pprint_publish(pub):
 def list(config, args):
     aptly = ExtendedAptlyClient(config.url)
     publish_list = aptly.publish.list()
+    logger.debug("API returned: {}".format(publish_list))
     publish_list.sort(key=lambda p: repr(PubSpec(p.distribution, p.prefix)))
     for p in publish_list:
         if args.detail:
