@@ -1,4 +1,4 @@
-FROM debian:stretch
+FROM debian:buster
 
 ENV GPG_KEY=DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0 \
     GPG_PASS=aptlyctltest \
@@ -19,7 +19,7 @@ RUN apt-get update && apt-get -y install aptly && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /home/aptly
-ADD --chown=aptly:aptly aptly-ctl-test.asc ./
+ADD --chown=aptly:aptly tests/aptly-ctl-test.asc ./
 USER aptly
 
 #echo "pinentry-mode loopback" | tee -a /home/aptly/.gnupg/gpg.conf && \
@@ -29,9 +29,9 @@ RUN echo "$GPG_PASS" | tee /home/aptly/gpg_pass && \
     echo "$GPG_KEY:6:" | gpg1 --batch --import-ownertrust && \
     gpg1 -k
 
-RUN aptly repo create -component=main -distribution=stretch stretch_main && \
-    aptly repo create -component=extra -distribution=stretch stretch_extra && \
-    aptly publish repo -batch -gpg-key=$GPG_KEY -passphrase "$GPG_PASS" -architectures=amd64 stretch_main
+#RUN aptly repo create -component=main -distribution=stretch stretch_main && \
+#    aptly repo create -component=extra -distribution=stretch stretch_extra && \
+#    aptly publish repo -batch -gpg-key=$GPG_KEY -passphrase "$GPG_PASS" -architectures=amd64 stretch_main
 
 EXPOSE 8090
 ENTRYPOINT ["/usr/bin/aptly", "api", "serve"]

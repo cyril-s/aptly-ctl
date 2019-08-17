@@ -1,17 +1,41 @@
 from functools import total_ordering
 import logging
-logger = logging.getLogger(__name__)
 try:
     import apt
     system_ver_compare = True
 except ImportError:
     system_ver_compare = False
 
+logger = logging.getLogger(__name__)
+
+
+def rotate(key_fmt, sort_func, n, seq):
+    """
+    Returns items in seq to rotate according to configured policy.
+    seq is divided in groups by a hash key which is derived from
+    key_fmt. Then items in every group are sorted by key set by
+    sort_func in ascending order and last abs(n) items are selected.
+    If n >= 0 the rest of items are returned for a group.
+    If n < 0 these items are returned for a group.
+    key_fmt is a python format string. Each item is passed to it as 'o' attribute.
+    """
+    h = {}
+    for item in seq:
+        h.setdefault(key_fmt.format(o=item), []).append(item)
+    for k, v in h.items():
+        v.sort(key=sort_func)
+        N = min(len(v), abs(n))
+        h[k] = v[:len(v)-N] if n >= 0 else v[len(v)-N:]
+    return list(sum(h.values(), []))
+
 
 @total_ordering
-class Version:
-    "Represents debian package version of the form [epoch:]upstream-version[-debian-revision]." \
-        + " Throws ValueError if version format is incorrect."
+class DebianVersion:
+    """
+    Represents debian package version of the form
+    [epoch:]upstream-version[-debian-revision].
+    Throws ValueError if version format is incorrect.
+    """
 
     def __init__(self, version):
 
@@ -68,10 +92,10 @@ class Version:
 
 
     def __repr__(self):
-        return self.version
+        return "".join(map(str, self._hashable_tuple))
 
     def __str__(self):
-        return self.__repr__()
+        return self.version
 
     def __eq__(self, other):
         return self.__cmp__(other) == 0
@@ -84,6 +108,24 @@ class Version:
             return apt.apt_pkg.version_compare(self.version, other.version)
         else:
             return self.version_compare(other)
+
+    @property
+    def _hashable_tuple(self):
+        parts = [ self.epoch, ":" ]
+        for c, s in enumerate([ self.upstream_version, "-" ,self.revision ]):
+            i = 0
+            while len(s) > 0:
+                decimal = (i % 2 == 1)
+                part, s = self._get_part(s, decimal)
+                parts.append(part)
+                i += 1
+            else:
+                if c != 1 and not decimal:
+                    parts.append("0")
+        return tuple(parts)
+
+    def __hash__(self):
+        return hash(self._hashable_tuple)
 
 
     def _order(self, c):
@@ -106,8 +148,6 @@ class Version:
 
     def _compare_parts(self, a, b, decimal):
         if decimal:
-            if a == "": a = "0"
-            if b == "": b = "0"
             return int(a) - int(b)
         else:
             i = 0
@@ -132,7 +172,10 @@ class Version:
             else:
                 div += 1
 
-        return (s[:div], s[div:])
+        if decimal and div == 0:
+            return ("0", s[:])
+        else:
+            return (s[:div], s[div:])
 
     def version_compare(self, other):
         "Compares version of the form [epoch:]upstream-version[-debian-revision]" \
@@ -147,7 +190,7 @@ class Version:
         for slf, othr in (self.upstream_version, other.upstream_version), (self.revision, other.revision):
             i = 0
             while len(slf) > 0 or len(othr) > 0:
-                decimal = (i % 2 == 1) 
+                decimal = (i % 2 == 1)
                 slf_part, slf = self._get_part(slf, decimal=decimal)
                 othr_part, othr = self._get_part(othr, decimal=decimal)
                 diff = self._compare_parts(slf_part, othr_part, decimal=decimal)
@@ -157,4 +200,3 @@ class Version:
 
         # versions are equal
         return 0
-
