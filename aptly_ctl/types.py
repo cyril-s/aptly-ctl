@@ -4,61 +4,75 @@ from collections import namedtuple
 import hashlib
 import os.path
 import fnvhash
+import aptly_api
 from aptly_ctl.util import DebianVersion as Version
 
 
 logger = logging.getLogger(__name__)
-key_regexp = re.compile(r"(\w*?)P(\w+) (\S+) (\S+) (\w+)$")
-dir_ref_regexp = re.compile(r"(\S+?)_(\S+?)_(\w+)")
+KEY_REGEXP = re.compile(r"(\w*?)P(\w+) (\S+) (\S+) (\w+)$")
+DIR_REF_REGEXP = re.compile(r"(\S+?)_(\S+?)_(\w+)")
 
 
-PackageFileInfo = namedtuple("PackageFileInfo",
-        ["filename", "path", "origpath", "size", "md5", "sha1", "sha256"])
+PackageFileInfo = namedtuple(
+    "PackageFileInfo",
+    ["filename", "path", "origpath", "size", "md5", "sha1", "sha256"]
+    )
 
 
-class Package(namedtuple("Package",
+class Package(namedtuple(
+        "Package",
         ["name", "version", "arch", "prefix", "files_hash", "fields", "file"],
-        defaults=[None, None])):
-    """Represents package in aptly or on filesystem"""
+        defaults=[None, None]
+        )):
+    """Represents package in aptly or on local filesystem"""
     __slots__ = ()
 
     @property
     def key(self):
+        """Returns aptly key"""
         return "{o.prefix}P{o.arch} {o.name} {o.version} {o.files_hash}".format(o=self)
 
     @property
     def dir_ref(self):
+        """Returns aptly dir ref"""
         return "{o.name}_{o.version}_{o.arch}".format(o=self)
 
     @classmethod
-    def fromAptlyApi(cls, p):
-        """Create from instance of aply_api.Package"""
-        kwargs = {}
+    def from_aptly_api(cls, package):
+        """Create from instance of aptly_api.Package"""
         try:
-            parsed_key = key_regexp.match(p.key).groups()
-        except (AttributeError, TypeError) as e:
-            raise ValueError("Invalid package: {}".format(p)) from e
-
+            parsed_key = KEY_REGEXP.match(package.key).groups()
+        except (AttributeError, TypeError) as exc:
+            raise ValueError("Invalid package: {}".format(package)) from exc
+        kwargs = {}
         kwargs["prefix"], kwargs["arch"], kwargs["name"] = parsed_key[:3]
         kwargs["version"] = Version(parsed_key[3])
         kwargs["files_hash"] = parsed_key[4]
-        if p.fields:
-            kwargs["fields"] = tuple(sorted(p.fields.items()))
-
+        if package.fields:
+            kwargs["fields"] = tuple(sorted(package.fields.items()))
         return cls(**kwargs)
 
     @classmethod
-    def fromFile(cls, filepath):
-        hashes = [ hashlib.md5(), hashlib.sha1(), hashlib.sha256() ]
+    def from_key(cls, key):
+        """Create from instance of aptly key"""
+        return cls.from_aptly_api(aptly_api.Package(key, None, None, None))
+
+    @classmethod
+    def from_file(cls, filepath):
+        """
+        Build representation of aptly package from package on local filesystem
+        """
+        hashes = [hashlib.md5(), hashlib.sha1(), hashlib.sha256()]
         size = 0
         buff_size = 1024 * 1024
-        with open(filepath, 'rb', buff_size) as f:
+        with open(filepath, 'rb', buff_size) as file:
             while True:
-                b = f.read(buff_size)
-                if len(b) == 0: break
-                size += len(b)
-                for h in hashes:
-                    h.update(b)
+                chunk = file.read(buff_size)
+                if not chunk:
+                    break
+                size += len(chunk)
+                for _hash in hashes:
+                    _hash.update(chunk)
         fileinfo = PackageFileInfo(
             md5=hashes[0].hexdigest(),
             sha1=hashes[1].hexdigest(),
@@ -79,34 +93,54 @@ class Package(namedtuple("Package",
         # Trying to guess future aptly key
         # FIXME get info from package itself and not it's filename
         try:
-            name, version, arch = dir_ref_regexp.match(fileinfo.filename).groups()
+            name, version, arch = DIR_REF_REGEXP.match(fileinfo.filename).groups()
         except AttributeError:
-            logger.warning("Failed to guess aptly key for filename %s", fileinfo.filename)
+            logger.warning("Failed to guess aptly key for filename %s",
+                           fileinfo.filename)
             name, version, arch = None, None, None
         else:
             version = Version(version)
 
         return cls(
-                name=name,
-                version=version,
-                arch=arch,
-                prefix="",
-                files_hash=files_hash,
-                fields=None,
-                file=fileinfo
-                )
+            name=name,
+            version=version,
+            arch=arch,
+            prefix="",
+            files_hash=files_hash,
+            fields=None,
+            file=fileinfo
+            )
 
 
 class Repo(namedtuple(
-    "Repo",
-    ["name", "comment", "default_distribution", "default_component", "packages"],
-    defaults=[None, None, None, None]
-    )):
+        "Repo",
+        ["name", "comment", "default_distribution", "default_component", "packages"],
+        defaults=[None, None, None, None]
+        )):
     """
-    Represents local repo in aptly
+    Represents local repo in aptly with optional field packages which is best
+    used when contains frozenset of Package instances
     """
     __slots__ = ()
 
     @classmethod
-    def fromAptlyApi(cls, repo, packages=None):
+    def from_aptly_api(cls, repo, packages=None):
+        """Create from instance of aply_api.Repo"""
         return cls(**repo._asdict(), packages=packages)
+
+
+class Snapshot(namedtuple(
+        "Snapshot",
+        ["name", "description", "created_at", "packages"],
+        defaults=[None, None, None]
+        )):
+    """
+    Represents snapshot in aptly with optional field packages which is best
+    used when contains frozenset of Package instances
+    """
+    __slots__ = ()
+
+    @classmethod
+    def from_aptly_api(cls, snapshot, packages=None):
+        """Create from instance of aply_api.Snapshot"""
+        return cls(**snapshot._asdict(), packages=packages)

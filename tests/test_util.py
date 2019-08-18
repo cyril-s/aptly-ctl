@@ -5,7 +5,7 @@ from aptly_ctl.types import Package
 
 
 def pkg(*args):
-    return Package(aptly_api.Package(*args))
+    return Package.from_aptly_api(aptly_api.Package(*args))
 
 
 def test_rotate():
