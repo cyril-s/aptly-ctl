@@ -1,370 +1,260 @@
 import pytest
-import aptly_api
+import random
+from datetime import datetime
+import aptly_ctl.aptly
 from aptly_ctl.types import Repo, Package, Snapshot
-from aptly_ctl.aptly import Aptly
-from aptly_ctl.exceptions import AptlyCtlError
+import aptly_ctl.exceptions
 
 
-REPOS = {
-        "stretch_main": aptly_api.Repo("stretch_main", None, "stretch", "main"),
-        "stretch_extra": aptly_api.Repo("stretch_extra", None, "stretch", "extra"),
-        "stretch_nightly": aptly_api.Repo("stretch_nightly", None, "stretch", "nightly")
-        }
-
-SNAPSHOTS = {
-        "stretch_main": aptly_api.Snapshot("stretch_main", None, None),
-        "stretch_extra": aptly_api.Snapshot("stretch_extra", None, None),
-        "stretch_nightly": aptly_api.Snapshot("stretch_nightly", None, None)
-        }
-
-PKGS = {
-        "stretch_main": {
-            None: [
-                aptly_api.Package("Pamd64 python 3.6.6 3660000000000000", None, None, None),
-                aptly_api.Package("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.5.0 1500000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.3.0 1300000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.4.0 1400000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.6.0 1500000000000000", None, None, None),
-                ],
-            "python": [
-                aptly_api.Package("Pamd64 python 3.6.6 3660000000000000", None, None, None),
-                aptly_api.Package("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-                ],
-            "aptly": [
-                aptly_api.Package("Pamd64 aptly 1.5.0 1500000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.3.0 1300000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.4.0 1400000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.6.0 1500000000000000", None, None, None),
-                ],
-            "nginx": [],
-            },
-        "stretch_extra": {
-            None: [
-                aptly_api.Package("Pall nginx 1.12.0 9a4063c2d0b3d196", None, None, None),
-                aptly_api.Package("Pall nginx 1.14.2-2 b38c3dcc478ddaf", None, None, None),
-                ],
-            "python": [],
-            "aptly": [],
-            "nginx": [
-                aptly_api.Package("Pall nginx 1.12.0 9a4063c2d0b3d196", None, None, None),
-                aptly_api.Package("Pall nginx 1.14.2-2 b38c3dcc478ddaf", None, None, None),
-                ],
-            },
-        "stretch_nightly": {
-            None: [
-                aptly_api.Package("Pamd64 python 3.6.6-3 3660000000000000", None, None, None),
-                aptly_api.Package("Pamd64 aptly 1.5.0-3 1500000000000000", None, None, None),
-                ],
-            "python": [
-                aptly_api.Package("Pamd64 python 3.6.6-3 3660000000000000", None, None, None),
-                ],
-            "aptly": [
-                aptly_api.Package("Pamd64 aptly 1.5.0-3 1500000000000000", None, None, None),
-                ],
-            "nginx": [],
-            },
-        }
-
-
-def mocked_search(self, name, query, *args, **kwargs):
-    try:
-        return PKGS[name].get(query, [])
-    except KeyError:
-        raise aptly_api.AptlyAPIException(
-            "Repo/Snapshot {} not found".format(name), status_code=404)
-
-def mocked_repo_show(self, name):
-    try:
-        return REPOS[name]
-    except KeyError:
-        raise aptly_api.AptlyAPIException(
-            "Repo {} not found".format(name), status_code=404)
-
-def mocked_snapshot_show(self, name):
-    try:
-        return SNAPSHOTS[name]
-    except KeyError:
-        raise aptly_api.AptlyAPIException(
-            "Snapshot {} not found".format(name), status_code=404)
-
-def mocked_repo_list(self):
-    return list(REPOS.values())
-
-def mocked_snapshot_list(self):
-    return list(SNAPSHOTS.values())
-
-@pytest.fixture
-def mock_search(monkeypatch):
-    monkeypatch.setattr(
-        aptly_api.parts.repos.ReposAPISection,
-        "show",
-        mocked_repo_show
-        )
-    monkeypatch.setattr(
-        aptly_api.parts.repos.ReposAPISection,
-        "list",
-        mocked_repo_list
-        )
-    monkeypatch.setattr(
-        aptly_api.parts.snapshots.SnapshotAPISection,
-        "show",
-        mocked_snapshot_show
-        )
-    monkeypatch.setattr(
-        aptly_api.parts.snapshots.SnapshotAPISection,
-        "list",
-        mocked_snapshot_list
-        )
-    monkeypatch.setattr(
-        aptly_api.parts.snapshots.SnapshotAPISection,
-        "list_packages",
-        mocked_search
-        )
-    monkeypatch.setattr(
-        aptly_api.parts.repos.ReposAPISection,
-        "search_packages",
-        mocked_search
-        )
+def rand(prefix=""):
+    return "{}{}".format(prefix, random.randrange(100000))
 
 
 class TestAptly:
+    @pytest.fixture
+    def aptly(self):
+        url = "http://localhost:8090/"
+        aptly = aptly_ctl.aptly.Aptly(url)
+        yield aptly
+        try:
+            for repo in aptly.repo_list():
+                try:
+                    aptly.repo_delete(repo.name, force=True)
+                except Exception as e:
+                    print("Failed to cleanup repos: {}".format(e))
+        except Exception as e:
+            print("Failed to cleanup repos: {}".format(e))
+        try:
+            for snapshot in aptly.snapshot_list():
+                try:
+                    aptly.snapshot_delete(snapshot.name, force=True)
+                except Exception as e:
+                    print("Failed to cleanup snapshots: {}".format(e))
+        except Exception as e:
+            print("Failed to cleanup snapshots: {}".format(e))
 
-    def test_repo_search(self, no_requests, mock_search):
-        a = Aptly("http://localhost:8080/api")
-        def build_expected(repo, query):
-            return Repo.from_aptly_api(
-                REPOS[repo],
-                frozenset(Package.from_aptly_api(pkg) for pkg in PKGS[repo][query]))
-        for args, expected in [
-                (
-                    ["stretch_main"],
-                    build_expected("stretch_main", None)
-                    ),
-                (
-                    ["stretch_main", "aptly"],
-                    build_expected("stretch_main", "aptly")
-                    ),
-                (
-                    ["stretch_main", "bla"],
-                    Repo.from_aptly_api(REPOS["stretch_main"], frozenset())
-                    ),
-                (
-                    [Repo.from_aptly_api(REPOS["stretch_main"])],
-                    build_expected("stretch_main", None)
-                    ),
-                ]:
-            result = a.repo_search(*args)
-            assert result == expected
+    def test_repo_show_no_repo_error(test, aptly):
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.repo_show(rand("test"))
 
-    def test_repo_search_err(self, no_requests, mock_search):
-        a = Aptly("http://localhost:8080/api")
-        with pytest.raises(AptlyCtlError):
-            a.repo_search("bla")
+    def test_repo_create(self, aptly):
+        expexted_repo = Repo(rand("test"), "comment", "sid", "main", tuple())
+        created_repo = aptly.repo_create(
+            expexted_repo.name,
+            expexted_repo.comment,
+            expexted_repo.default_distribution,
+            expexted_repo.default_component,
+        )
+        assert created_repo == expexted_repo
+        shown_repo = aptly.repo_show(created_repo.name)
+        assert shown_repo == expexted_repo
 
-    def test_snapshot_search(self, no_requests, mock_search):
-        a = Aptly("http://localhost:8080/api")
-        def build_expected(snapshot, query):
-            return Snapshot.from_aptly_api(
-                SNAPSHOTS[snapshot],
-                frozenset(Package.from_aptly_api(pkg) for pkg in PKGS[snapshot][query]))
-        for args, expected in [
-                (
-                    ["stretch_main"],
-                    build_expected("stretch_main", None)
-                    ),
-                (
-                    ["stretch_main", "aptly"],
-                    build_expected("stretch_main", "aptly")
-                    ),
-                (
-                    ["stretch_main", "bla"],
-                    Snapshot.from_aptly_api(SNAPSHOTS["stretch_main"], frozenset())
-                    ),
-                (
-                    [Snapshot.from_aptly_api(SNAPSHOTS["stretch_main"])],
-                    build_expected("stretch_main", None)
-                    ),
-                ]:
-            result = a.snapshot_search(*args)
-            assert result == expected
+    def test_repo_create_same_name_error(self, aptly):
+        args = (rand("test"), "comment", "sid", "main")
+        aptly.repo_create(*args)
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.repo_create(*args)
 
-    def test_snapshot_search_err(self, no_requests, mock_search):
-        a = Aptly("http://localhost:8080/api")
-        with pytest.raises(AptlyCtlError):
-            a.snapshot_search("bla")
+    def test_repo_edit(self, aptly):
+        name = rand("test")
+        orig_args = (name, "comment", "sid", "main")
+        edited_agrs = (name, "new comment", "buster", "contrib")
+        expected_repo = Repo(*edited_agrs, packages=tuple())
+        aptly.repo_create(*orig_args)
+        edited_repo = aptly.repo_edit(*edited_agrs)
+        assert edited_repo == expected_repo
 
-    def test_search(self, no_requests, mock_search):
-        a = Aptly("http://localhost:8080/api")
-        def build_expected(repos, snapshots, queries):
-            expected = set()
-            for repo in repos:
-                packages = []
-                for query in queries:
-                    packages.extend(
-                        Package.from_aptly_api(pkg) for pkg in PKGS[repo][query])
-                expected.add(Repo.from_aptly_api(REPOS[repo], frozenset(packages)))
-            for snapshot in snapshots:
-                packages = []
-                for query in queries:
-                    packages.extend(
-                        Package.from_aptly_api(pkg) for pkg in PKGS[snapshot][query])
-                expected.add(Snapshot.from_aptly_api(SNAPSHOTS[snapshot], frozenset(packages)))
-            return expected
-        for kwargs, expected in [
-                (
-                    {},
-                    build_expected(
-                        repos=["stretch_main", "stretch_extra", "stretch_nightly"],
-                        snapshots=["stretch_main", "stretch_extra", "stretch_nightly"],
-                        queries=[None],
-                        ),
-                    ),
-                (
-                    {"queries": ["aptly"]},
-                    build_expected(
-                        repos=["stretch_main", "stretch_nightly"],
-                        snapshots=["stretch_main", "stretch_nightly"],
-                        queries=["aptly"],
-                        ),
-                    ),
-                (
-                    {"queries": ["aptly", "aptly"]},
-                    build_expected(
-                        repos=["stretch_main", "stretch_nightly"],
-                        snapshots=["stretch_main", "stretch_nightly"],
-                        queries=["aptly"],
-                        ),
-                    ),
-                (
-                    {"queries": ["aptly", "python"]},
-                    build_expected(
-                        repos=["stretch_main", "stretch_nightly"],
-                        snapshots=["stretch_main", "stretch_nightly"],
-                        queries=["aptly", "python"],
-                        ),
-                    ),
-                # only repos
-                (
-                    {"queries": ["python"], "repos": ["stretch_nightly"]},
-                    build_expected(
-                        repos=["stretch_nightly"],
-                        snapshots=[],
-                        queries=["python"],
-                        ),
-                    ),
-                (
-                    {
-                        "queries": ["python"],
-                        "repos": ["stretch_nightly", "stretch_nightly"],
-                        },
-                    build_expected(
-                        repos=["stretch_nightly"],
-                        snapshots=[],
-                        queries=["python"],
-                        ),
-                    ),
-                (
-                    {
-                        "queries": ["python"],
-                        "repos": ["stretch_main", "stretch_nightly"],
-                        },
-                    build_expected(
-                        repos=["stretch_main", "stretch_nightly"],
-                        snapshots=[],
-                        queries=["python"],
-                        ),
-                    ),
-                (
-                    {"queries": ["python"], "repos": "*"},
-                    build_expected(
-                        repos=["stretch_main", "stretch_nightly"],
-                        snapshots=[],
-                        queries=["python"],
-                        ),
-                    ),
-                # only snapshots
-                (
-                    {"queries": ["python"], "snapshots": ["stretch_nightly"]},
-                    build_expected(
-                        repos=[],
-                        snapshots=["stretch_nightly"],
-                        queries=["python"],
-                        ),
-                    ),
-                (
-                    {
-                        "queries": ["python"],
-                        "snapshots": ["stretch_nightly", "stretch_nightly"],
-                        },
-                    build_expected(
-                        repos=[],
-                        snapshots=["stretch_nightly"],
-                        queries=["python"],
-                        ),
-                    ),
-                (
-                    {
-                        "queries": ["python"],
-                        "snapshots": ["stretch_main", "stretch_nightly"],
-                        },
-                    build_expected(
-                        repos=[],
-                        snapshots=["stretch_main", "stretch_nightly"],
-                        queries=["python"],
-                        ),
-                    ),
-                (
-                    {"queries": ["python"], "snapshots": "*"},
-                    build_expected(
-                        repos=[],
-                        snapshots=["stretch_main", "stretch_nightly"],
-                        queries=["python"],
-                        ),
-                    ),
-                ]:
-            result = a.search(**kwargs)
-            assert set(result[0]) == expected
-            assert not result[1]
+    def test_repo_edit_no_repo_error(self, aptly):
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.repo_edit(rand("test"), comment="bla")
 
-    def test_search_err(self, no_requests, mock_search):
-        a = Aptly("http://localhost:8080/api")
-        for kwargs in [
-                {"repos": ["bla"]},
-                {"snapshots": ["bla"]},
-                ]:
-            result = a.search(**kwargs)
-            assert not result[0]
-            assert len(result[1]) == 1
-            assert isinstance(result[1][0], AptlyCtlError)
+    def test_repo_delete(self, aptly):
+        name = rand("test")
+        aptly.repo_create(name)
+        aptly.repo_show(name)
+        aptly.repo_delete(name)
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.repo_show(name)
 
-    def test_snapshot_diff(self, no_requests, monkeypatch):
-        a = Aptly("http://localhost:8080/api")
-        def mocked_diff(*args):
-            return [
-                {
-                    "Left": "Pamd64 python 3.6.6 3660000000000000",
-                    "Right": None
-                    },
-                {
-                    "Left": None,
-                    "Right": "Pamd64 aptly 1.5.0-3 1500000000000000"
-                    },
-                {
-                    "Left": "Pall nginx 1.12.0 9a4063c2d0b3d196",
-                    "Right": "Pall nginx 1.12.0 5555555555555555",
-                    },
-                ]
-        monkeypatch.setattr(
-            aptly_api.parts.snapshots.SnapshotAPISection, "diff", mocked_diff)
-        diff = a.snapshot_diff("snap1", "snap2")
-        assert diff == [
-            (Package.from_key("Pamd64 python 3.6.6 3660000000000000"), None),
-            (None, Package.from_key("Pamd64 aptly 1.5.0-3 1500000000000000")),
-            (
-                Package.from_key("Pall nginx 1.12.0 9a4063c2d0b3d196"),
-                Package.from_key("Pall nginx 1.12.0 5555555555555555"),
-                ),
-            ]
+    def test_repo_delete_no_repo_error(self, aptly):
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.repo_delete(rand("test"))
+
+    def test_snapshot_show_no_snapshot_error(test, aptly):
+        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
+            aptly.snapshot_show(rand("test"))
+
+    def test_snapshot_create(self, aptly):
+        repo = aptly.repo_create(rand("test"))
+        expexted_snapshot = Snapshot(repo.name, "description", None, tuple())
+        created_snapshot = aptly.snapshot_create(
+            repo.name, expexted_snapshot.name, expexted_snapshot.description,
+        )
+        assert expexted_snapshot == created_snapshot._replace(created_at=None)
+        shown_snapshot = aptly.snapshot_show(created_snapshot.name)
+        assert expexted_snapshot == shown_snapshot._replace(created_at=None)
+
+    def test_snapshot_create_no_repo_error(self, aptly):
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.snapshot_create(rand("repo"), rand("snap"))
+
+    def test_snapshot_create_same_name_error(self, aptly):
+        repo = aptly.repo_create(rand("test"))
+        args = (repo.name, rand("snap"), "description")
+        aptly.snapshot_create(*args)
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.snapshot_create(*args)
+
+    def test_snapshot_edit(self, aptly):
+        repo = aptly.repo_create(rand("test"))
+        name = rand("orig_snap")
+        orig_args = (name, "description")
+        edited_agrs = (rand("new_snap"), "new description")
+        expected_snapshot = Snapshot(*edited_agrs, created_at=None, packages=tuple())
+        aptly.snapshot_create(repo.name, *orig_args)
+        edited_snapshot = aptly.snapshot_edit(name, *edited_agrs)
+        assert expected_snapshot == edited_snapshot._replace(created_at=None)
+
+    def test_snapshot_edit_no_snapshot_error(self, aptly):
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.snapshot_edit(rand("test"), new_description="new desc")
+
+    def test_snapshot_edit_same_snapshot_name_error(self, aptly):
+        repo = aptly.repo_create(rand("repo"))
+        snap1_name = rand("snap1")
+        snap1 = aptly.snapshot_create(repo.name, snap1_name)
+        snap2 = aptly.snapshot_create(repo.name, rand("snap"))
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.snapshot_edit(snap2.name, new_name=snap1_name)
+
+    def test_snapshot_delete(self, aptly):
+        repo = aptly.repo_create(rand("test"))
+        snap = aptly.snapshot_create(repo.name, rand("snap"))
+        aptly.snapshot_show(snap.name)
+        aptly.snapshot_delete(snap.name)
+        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
+            aptly.snapshot_show(snap.name)
+
+    def test_snapshot_delete_no_snapshot_error(self, aptly):
+        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
+            aptly.snapshot_delete(rand("test"))
+
+    def test_repo_delete_without_force_error(self, aptly):
+        repo = aptly.repo_create(rand("repo"))
+        snap = aptly.snapshot_create(repo.name, rand("snap"))
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.repo_delete(repo.name)
+
+    def test_repo_delete_force(self, aptly):
+        repo = aptly.repo_create(rand("repo"))
+        snap = aptly.snapshot_create(repo.name, rand("snap"))
+        aptly.repo_delete(repo.name, force=True)
+
+    # def test_snapshot_delete_without_force_error(self, aptly):
+    # def test_snapshot_delete_force(self, aptly):
+
+    def test_put(self, aptly, packages_simple):
+        repos = set()
+        for _ in range(2):
+            repos.add(aptly.repo_create(rand("test")))
+        added, failed, errors = aptly.put(
+            [repo.name for repo in repos],
+            [pkg.file.origpath for pkg in packages_simple],
+        )
+        assert len(added) == 2
+        assert len(failed) == 0
+        assert len(errors) == 0
+        assert repos == set(repo._replace(packages=tuple()) for repo in added)
+        for repo in added:
+            assert repo.packages == frozenset(packages_simple)
+
+    def test_put_no_repo(self, aptly, packages_simple):
+        repos = [rand("test")]
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.put(repos, [pkg.file.origpath for pkg in packages_simple])
+
+    # def test_put_conflict_error
+    # def test_put_force_replace
+
+    def test_repo_search(self, aptly, packages_simple):
+        repo = aptly.repo_create(rand("test"))
+        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
+        searched_repo = aptly.repo_search(repo)
+        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
+        assert repo._replace(packages=expected_pkgs) == searched_repo
+
+    def test_repo_search_no_repo(self, aptly):
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.repo_search(rand("test"))
+        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+            aptly.repo_search(Repo(rand("test")))
+
+    def test_repo_search_bad_query(self, aptly):
+        repo = aptly.repo_create(rand("test"))
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.repo_search(repo, query="Name (")
+
+    def test_snapshot_search(self, aptly, packages_simple):
+        repo = aptly.repo_create(rand("test"))
+        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
+        snapshot = aptly.snapshot_create(repo.name, rand("test"))
+        searched_snapshot = aptly.snapshot_search(snapshot)
+        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
+        assert snapshot._replace(packages=expected_pkgs) == searched_snapshot
+
+    def test_snapshot_search_no_snapshot(self, aptly):
+        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
+            aptly.snapshot_search(rand("test"))
+        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
+            aptly.snapshot_search(Snapshot(rand("test")))
+
+    def test_snapshot_search_bad_query(self, aptly):
+        repo = aptly.repo_create(rand("test"))
+        snapshot = aptly.snapshot_create(repo.name, rand("test"))
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.snapshot_search(snapshot, query="Name (")
+
+    def test_search(self, aptly, packages_simple):
+        repo = aptly.repo_create(rand("test"))
+        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
+        snapshot = aptly.snapshot_create(repo.name, rand("test"))
+        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
+        expected = [
+            repo._replace(packages=expected_pkgs),
+            snapshot._replace(packages=expected_pkgs),
+        ]
+
+        result, errors = aptly.search([repo], [snapshot])
+        assert len(result) == 2
+        assert len(errors) == 0
+        assert set(result) == set(expected)
+
+    def test_search_no_snapshot_error(self, aptly, packages_simple):
+        repo = aptly.repo_create(rand("test"))
+        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
+        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
+        expected = [
+            repo._replace(packages=expected_pkgs),
+        ]
+
+        result, errors = aptly.search([repo], [rand("snap")])
+        assert len(result) == 1
+        assert len(errors) == 1
+        assert set(result) == set(expected)
+        assert isinstance(errors[0], aptly_ctl.exceptions.SnapshotNotFoundError)
+
+    def test_remove(self, aptly, packages_simple):
+        repo = aptly.repo_create(rand("test"))
+        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
+        expected = aptly.repo_search(repo, query="!aptly")
+        to_delete = aptly.repo_search(repo, query="aptly")
+        errors = aptly.remove(to_delete)
+        assert len(errors) == 0
+        remaining = aptly.repo_search(repo)
+        assert remaining == expected
+
+    def test_remove_fail(self, aptly, packages_simple):
+        repo = Repo("test", packages=frozenset(packages_simple))
+        errors = aptly.remove(repo)
+        assert len(errors) == 1
+        assert isinstance(errors[0][1], aptly_ctl.exceptions.RepoNotFoundError)

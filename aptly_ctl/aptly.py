@@ -4,7 +4,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from itertools import product
 from aptly_api import Client, AptlyAPIException
-from aptly_ctl.exceptions import AptlyCtlError
+from aptly_ctl.exceptions import (
+    AptlyCtlError,
+    RepoNotFoundError,
+    InvalidOperationError,
+    SnapshotNotFoundError,
+)
 from aptly_ctl.types import Package, Repo, Snapshot
 
 logger = logging.getLogger(__name__)
@@ -28,9 +33,8 @@ class Aptly:
         try:
             show_result = self.aptly.repos.show(name)
         except AptlyAPIException as exc:
-            # repo with this name doesn't exists
             if exc.status_code == 404:
-                raise AptlyCtlError(exc) from exc
+                raise RepoNotFoundError(name)
             raise
         else:
             return Repo.from_aptly_api(show_result)
@@ -56,7 +60,7 @@ class Aptly:
         except AptlyAPIException as exc:
             # repo with this name already exists
             if exc.status_code == 400:
-                raise AptlyCtlError(exc) from exc
+                raise InvalidOperationError(str(exc))
             raise
         else:
             logger.info("Created repo %s", create_result)
@@ -80,8 +84,10 @@ class Aptly:
         except AptlyAPIException as exc:
             # 0 - at least one of comment, dist, comp required
             # 404 - repo with this name not found
-            if exc.status_code in [0, 404]:
-                raise AptlyCtlError(exc) from exc
+            if exc.status_code == 0:
+                raise InvalidOperationError(str(exc))
+            if exc.status_code == 404:
+                raise RepoNotFoundError(name)
             raise
         else:
             logger.info("Edited repo: %s", edit_result)
@@ -103,8 +109,10 @@ class Aptly:
         except AptlyAPIException as exc:
             # 404 - repo with this name not found
             # 409 - repository can’t be dropped
-            if exc.status_code in [404, 409]:
-                raise AptlyCtlError(exc) from exc
+            if exc.status_code == 404:
+                raise RepoNotFoundError(name)
+            if exc.status_code == 409:
+                raise InvalidOperationError(str(exc))
             raise
         else:
             logger.info("Deleted repo %s", name)
@@ -134,18 +142,21 @@ class Aptly:
             repo = self.repo_show(repo)
         try:
             pkgs = self.aptly.repos.search_packages(
-                repo.name, query, with_depls, details)
+                repo.name, query, with_depls, details
+            )
         except AptlyAPIException as exc:
             emsg = exc.args[0]
             if exc.status_code == 400 and "parsing failed:" in emsg.lower():
                 _, _, fail_desc = emsg.partition(":")
-                raise AptlyCtlError(
-                    'Bad query "{}":{}'.format(query, fail_desc))
-            elif exc.status_code == 404: # repo not found
-                raise AptlyCtlError(exc) from exc
+                raise InvalidOperationError(
+                    'Bad query "{}":{}'.format(query, fail_desc)
+                )
+            elif exc.status_code == 404:
+                raise RepoNotFoundError(repo.name)
             raise
         return repo._replace(
-            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs))
+            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
+        )
 
     def snapshot_show(self, name):
         """
@@ -158,9 +169,8 @@ class Aptly:
         try:
             snapshot = self.aptly.snapshots.show(name)
         except AptlyAPIException as exc:
-            # snapshot with this name doesn't exists
             if exc.status_code == 404:
-                raise AptlyCtlError(exc) from exc
+                raise SnapshotNotFoundError(name)
             raise
         else:
             return Snapshot.from_aptly_api(snapshot)
@@ -169,7 +179,7 @@ class Aptly:
         """Returns all snapshots as tuple of aptly_ctl.types.Snapshot"""
         return tuple(map(Snapshot.from_aptly_api, self.aptly.snapshots.list()))
 
-    def snapshot_repo(self, name, snapshotname, description=None):
+    def snapshot_create(self, repo_name, snapshot_name, description=None):
         """
         Create snapshot named 'snapshotname' from local repo named 'name'
 
@@ -182,16 +192,20 @@ class Aptly:
         """
         try:
             snapshot = self.aptly.snapshots.create_from_repo(
-                name, snapshotname, description)
+                repo_name, snapshot_name, description
+            )
         except AptlyAPIException as exc:
             # 400 - snapshot already exists
             # 404 - repo with this name not found
-            if exc.status_code in [400, 400]:
-                raise AptlyCtlError(exc) from exc
+            if exc.status_code == 400:
+                raise InvalidOperationError(str(exc))
+            if exc.status_code == 404:
+                raise RepoNotFoundError(repo_name)
             raise
         else:
-            logger.info("Created snapshot '%s' from local repo '%s'",
-                        snapshotname, name)
+            logger.info(
+                "Created snapshot '%s' from local repo '%s'", snapshot_name, repo_name
+            )
             return Snapshot.from_aptly_api(snapshot)
 
     def snapshot_edit(self, name, new_name=None, new_description=None):
@@ -212,8 +226,10 @@ class Aptly:
             # 0 - at least one of new_name, new_description required
             # 404 - snapshot with this name not found
             # 409 - snapshot with named new_name already exists
-            if exc.status_code in [0, 404, 409]:
-                raise AptlyCtlError(exc) from exc
+            if exc.status_code in [0, 409]:
+                raise InvalidOperationError(str(exc))
+            if exc.status_code == 404:
+                raise RepoNotFoundError(name)
             raise
         else:
             logger.info("Edited snapshot %s: %s", name, snapshot)
@@ -236,8 +252,10 @@ class Aptly:
         except AptlyAPIException as exc:
             # 404 - snapshot with this name not found
             # 409 - snapshot can’t be dropped
-            if exc.status_code in [404, 409]:
-                raise AptlyCtlError(exc) from exc
+            if exc.status_code == 404:
+                raise SnapshotNotFoundError(name)
+            if exc.status_code == 409:
+                raise InvalidOperationError(str(exc))
             raise
         else:
             logger.info("Deleted snapshot %s", name)
@@ -267,18 +285,21 @@ class Aptly:
             snapshot = self.snapshot_show(snapshot)
         try:
             pkgs = self.aptly.snapshots.list_packages(
-                snapshot.name, query, with_depls, details)
+                snapshot.name, query, with_depls, details
+            )
         except AptlyAPIException as exc:
             emsg = exc.args[0]
             if exc.status_code == 400 and "parsing failed:" in emsg.lower():
                 _, _, fail_desc = emsg.partition(":")
-                raise AptlyCtlError(
-                    'Bad query "{}":{}'.format(query, fail_desc))
-            elif exc.status_code == 404: # snapshot not found
-                raise AptlyCtlError(exc) from exc
+                raise InvalidOperationError(
+                    'Bad query "{}":{}'.format(query, fail_desc)
+                )
+            elif exc.status_code == 404:  # snapshot not found
+                raise SnapshotNotFoundError(snapshot)
             raise
         return snapshot._replace(
-            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs))
+            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
+        )
 
     def snapshot_diff(self, snap1, snap2):
         """
@@ -291,12 +312,14 @@ class Aptly:
             out.append((left, right))
         return out
 
-    def search(self,
-               repos=tuple(),
-               snapshots=tuple(),
-               queries=None,
-               with_deps=False,
-               details=False):
+    def search(
+        self,
+        repos=tuple(),
+        snapshots=tuple(),
+        queries=None,
+        with_deps=False,
+        details=False,
+    ):
         """
         Search list of queries in aptly local repos in parallel and return
         tuple of aptly_ctl.types.Repo's list with found packages and list of
@@ -315,6 +338,11 @@ class Aptly:
 
         If repos and snapshots are both not supplied, this is the same as
         repos='*', snapshots='*'
+
+        Returns: tuple (result, erros), where
+            result -- list of aptly_ctl.types.Repo and aptly_ctl.types.Snapshot
+                instances with packages attribute set to the query result
+            errors -- list of exceptions occured during search
         """
         queries = tuple(queries) if queries else (None,)
         if not (repos or snapshots):
@@ -330,21 +358,15 @@ class Aptly:
         with ThreadPoolExecutor(max_workers=self.max_workers) as exe:
             try:
                 for repo, query in product(repos, queries):
-                    futures.append(exe.submit(
-                        self.repo_search,
-                        repo,
-                        query,
-                        with_deps,
-                        details
-                        ))
+                    futures.append(
+                        exe.submit(self.repo_search, repo, query, with_deps, details)
+                    )
                 for snapshot, query in product(snapshots, queries):
-                    futures.append(exe.submit(
-                        self.snapshot_search,
-                        snapshot,
-                        query,
-                        with_deps,
-                        details
-                        ))
+                    futures.append(
+                        exe.submit(
+                            self.snapshot_search, snapshot, query, with_deps, details
+                        )
+                    )
                 for future in as_completed(futures, 300):
                     try:
                         container = future.result()
@@ -354,7 +376,7 @@ class Aptly:
                     except Exception as exc:
                         errors.append(exc)
             except KeyboardInterrupt:
-                #NOTE we cannot cancel requests that are hanging on open()
+                # NOTE we cannot cancel requests that are hanging on open()
                 # so thread pool's context manager will hang on shutdown()
                 # untill these requests timeout. Timeout is set in aptly client
                 # class constructor and defaults to 60 seconds
@@ -372,6 +394,22 @@ class Aptly:
         """
         Upload packages from local filesystem to aptly server,
         put them into local_repos
+
+        Arguments:
+            local_repos -- list of names of local repos to put packages in
+            packages -- list of package file names to upload
+
+        Keyworad arguments:
+            force_replace -- when True remove packages conflicting with package being added
+
+        Returns: tuple (added, failed, errors), where
+            added -- list of instances of aptly_ctl.types.Repo with
+                packages attribute set to frozenset of aptly_ctl.types.Package
+                instances that were successfully added to a local repo
+            failed -- list of instances of aptly_ctl.types.Repo with
+                packages attribute set to frozenset of aptly_ctl.types.Package
+                instances that were not added to a local repo
+            errors -- list of exceptions raised during packages addition
         """
         timestamp = datetime.utcnow().timestamp()
         # os.getpid just in case 2 instances launched at the same time
@@ -388,11 +426,10 @@ class Aptly:
                 repo.name,
                 directory,
                 remove_processed_files=False,
-                force_replace=force_replace
-                )
+                force_replace=force_replace,
+            )
             for file in addition.failed_files:
-                logger.warning("Failed to add file %s to repo %s",
-                               file, repo.name)
+                logger.warning("Failed to add file %s to repo %s", file, repo.name)
             for msg in addition.report["Warnings"] + addition.report["Removed"]:
                 logger.warning(msg)
             # example Added msg "python3-wheel_0.30.0-0.2_all added"
@@ -405,15 +442,18 @@ class Aptly:
                     failed_pkgs.append(pkg)
                 else:
                     added_pkgs.append(pkg)
-            #FIXME aptly_ctl.types.Package.from_file implementation is incomplete
+            # FIXME aptly_ctl.types.Package.from_file implementation is incomplete
             # and will allow such errors to occur
             if added:
-                logger.warning("Output is incomplete! These packages %s %s",
-                               added, "were added but omitted in output")
+                logger.warning(
+                    "Output is incomplete! These packages %s %s",
+                    added,
+                    "were added but omitted in output",
+                )
             return (
                 repo._replace(packages=frozenset(added_pkgs)),
                 repo._replace(packages=frozenset(failed_pkgs)),
-                )
+            )
 
         logger.info('Uploading the packages to directory "%s"', directory)
         futures, added, failed, errors = [], [], [], []
@@ -422,8 +462,9 @@ class Aptly:
             with ThreadPoolExecutor(max_workers=self.max_workers) as exe:
                 try:
                     for repo in repos_to_put:
-                        futures.append(exe.submit(
-                            worker, repo, pkgs, directory, force_replace))
+                        futures.append(
+                            exe.submit(worker, repo, pkgs, directory, force_replace)
+                        )
                     for future in as_completed(futures, 300):
                         try:
                             result = future.result()
@@ -434,7 +475,7 @@ class Aptly:
                         except Exception as exc:
                             errors.append(exc)
                 except KeyboardInterrupt:
-                    #NOTE we cannot cancel requests that are hanging on open()
+                    # NOTE we cannot cancel requests that are hanging on open()
                     # so thread pool's context manager will hang on shutdown()
                     # untill these requests timeout. Timeout is set in aptly client
                     # class constructor and defaults to 60 seconds
@@ -449,28 +490,29 @@ class Aptly:
 
         return (added, failed, errors)
 
-    def remove(self, *args):
+    def remove(self, *repos):
         """
         Deletes packages from local repo
 
         Arguments:
-            *args -- aptly_ctl.types.Repo instances where packages from
+            *repos -- aptly_ctl.types.Repo instances where packages from
                      'packages' field are to be deleted
 
         Returns list of tuples for every repo for which package removal failed.
         The first item in a tuple is an aptly_ctl.types.Repo and the second is
         exception with description of failure
         """
-        result = []
-        for repo in args:
+        fails = []
+        for repo in repos:
             if not repo.packages:
                 continue
             try:
                 self.aptly.repos.delete_packages_by_key(
-                    repo.name, *[pkg.key for pkg in repo.packages])
+                    repo.name, *[pkg.key for pkg in repo.packages]
+                )
             except AptlyAPIException as exc:
-                if exc.status_code == 404: # repo or package does not exist
-                    result.append((repo, AptlyCtlError(exc)))
+                if exc.status_code == 404:
+                    fails.append((repo, RepoNotFoundError(repo.name)))
                 else:
                     raise
-        return result
+        return fails

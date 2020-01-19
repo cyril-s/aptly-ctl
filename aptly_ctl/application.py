@@ -9,10 +9,13 @@ from aptly_ctl.Config import Config, VERBOSITY
 from aptly_api.base import AptlyAPIException
 import aptly_ctl.subcommands
 
+
 def _init_logging(level, subcommand):
     numeric_level = getattr(logging, level, None)
     if level == VERBOSITY[2]:
-        log_fmt = "%(levelname)s {}(%(process)d) [%(name)s:%(funcName)s()] %(message)s".format(subcommand)
+        log_fmt = "%(levelname)s {}(%(process)d) [%(name)s:%(funcName)s()] %(message)s".format(
+            subcommand
+        )
     else:
         log_fmt = "%(levelname)s {}(%(process)d) %(message)s".format(subcommand)
     app_logger.setLevel(numeric_level)
@@ -29,8 +32,7 @@ def _init_logging(level, subcommand):
 
 def config_parser():
 
-    description = \
-    """
+    description = """
     aptly-ctl -- is a convenient aptly API  command line client.  For details on
     aptly see  https://www.aptly.info/.  This tool uses some notations that help
     tool to interact with itself. Here are they.
@@ -62,22 +64,41 @@ def config_parser():
     So no output is a success.\
     """
 
-    parser = argparse.ArgumentParser(prog=__progName__,
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=description)
+    parser = argparse.ArgumentParser(
+        prog=__progName__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=description,
+    )
 
-    parser.add_argument("-p", "--profile", default="0",
-            help="profile from config file. Can be it's name or number. Default is the first one")
+    parser.add_argument(
+        "-p",
+        "--profile",
+        default="0",
+        help="profile from config file. Can be it's name or number. Default is the first one",
+    )
 
     parser.add_argument("-c", "--config", help="path to config file")
 
-    parser.add_argument("-C", "--config-keys", metavar="KEY", action="append", default=[],
-            help="override key value in config for chosen profile")
+    parser.add_argument(
+        "-C",
+        "--config-keys",
+        metavar="KEY",
+        action="append",
+        default=[],
+        help="override key value in config for chosen profile",
+    )
 
-    parser.add_argument("-v", "--verbose", action="count", default=0,
-            help="increase verbosity. Can be set mutiple times to increase verbosity even more")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="increase verbosity. Can be set mutiple times to increase verbosity even more",
+    )
 
-    parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
+    parser.add_argument(
+        "--version", action="version", version="%(prog)s {}".format(__version__)
+    )
 
     subparsers = parser.add_subparsers(dest="subcommand")
     return (parser, subparsers)
@@ -110,15 +131,20 @@ def main():
         sys.exit(2)
 
     if not system_ver_compare:
-        logger.debug("Cannot import apt.apt_pkg module from python3-apt" \
-                + " package. Using python substitute that is much slower.")
+        logger.debug(
+            "Cannot import apt.apt_pkg module from python3-apt"
+            + " package. Using python substitute that is much slower."
+        )
 
     logger.info("Running %s subcommand." % args.subcommand)
     try:
         sys.exit(args.func(config, args))
     except AptlyAPIException as e:
         if e.status_code == 404 and "page not found" in e.args[0].lower():
-            logger.error("API reponded with '%s'. Check configured API url and run command with -vv to see failed request details." % e.args[0])
+            logger.error(
+                "API reponded with '%s'. Check configured API url and run command with -vv to see failed request details."
+                % e.args[0]
+            )
             logger.debug("", exc_info=True)
             sys.exit(1)
         else:

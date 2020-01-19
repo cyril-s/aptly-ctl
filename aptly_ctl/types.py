@@ -14,17 +14,19 @@ DIR_REF_REGEXP = re.compile(r"(\S+?)_(\S+?)_(\w+)")
 
 
 PackageFileInfo = namedtuple(
-    "PackageFileInfo",
-    ["filename", "path", "origpath", "size", "md5", "sha1", "sha256"]
-    )
+    "PackageFileInfo", ["filename", "path", "origpath", "size", "md5", "sha1", "sha256"]
+)
 
 
-class Package(namedtuple(
+class Package(
+    namedtuple(
         "Package",
         ["name", "version", "arch", "prefix", "files_hash", "fields", "file"],
-        defaults=[None, None]
-        )):
+        defaults=[None, None],
+    )
+):
     """Represents package in aptly or on local filesystem"""
+
     __slots__ = ()
 
     @property
@@ -65,7 +67,7 @@ class Package(namedtuple(
         hashes = [hashlib.md5(), hashlib.sha1(), hashlib.sha256()]
         size = 0
         buff_size = 1024 * 1024
-        with open(filepath, 'rb', buff_size) as file:
+        with open(filepath, "rb", buff_size) as file:
             while True:
                 chunk = file.read(buff_size)
                 if not chunk:
@@ -81,22 +83,25 @@ class Package(namedtuple(
             filename=os.path.basename(os.path.realpath(filepath)),
             path=os.path.realpath(os.path.abspath(filepath)),
             origpath=filepath,
-            )
-        data = b''.join([
-            bytes(fileinfo.filename, "ascii"),
-            fileinfo.size.to_bytes(8, 'big'),
-            bytes(fileinfo.md5, "ascii"),
-            bytes(fileinfo.sha1, "ascii"),
-            bytes(fileinfo.sha256, "ascii"),
-            ])
-        files_hash = fnvhash.fnv1a_64(data)
+        )
+        data = b"".join(
+            [
+                bytes(fileinfo.filename, "ascii"),
+                fileinfo.size.to_bytes(8, "big"),
+                bytes(fileinfo.md5, "ascii"),
+                bytes(fileinfo.sha1, "ascii"),
+                bytes(fileinfo.sha256, "ascii"),
+            ]
+        )
+        files_hash = "{:x}".format(fnvhash.fnv1a_64(data))
         # Trying to guess future aptly key
         # FIXME get info from package itself and not it's filename
         try:
             name, version, arch = DIR_REF_REGEXP.match(fileinfo.filename).groups()
         except AttributeError:
-            logger.warning("Failed to guess aptly key for filename %s",
-                           fileinfo.filename)
+            logger.warning(
+                "Failed to guess aptly key for filename %s", fileinfo.filename
+            )
             name, version, arch = None, None, None
         else:
             version = Version(version)
@@ -108,39 +113,45 @@ class Package(namedtuple(
             prefix="",
             files_hash=files_hash,
             fields=None,
-            file=fileinfo
-            )
+            file=fileinfo,
+        )
 
 
-class Repo(namedtuple(
+class Repo(
+    namedtuple(
         "Repo",
         ["name", "comment", "default_distribution", "default_component", "packages"],
-        defaults=[None, None, None, None]
-        )):
+        defaults=[None, None, None, None, tuple()],
+    )
+):
     """
     Represents local repo in aptly with optional field packages which is best
     used when contains frozenset of Package instances
     """
+
     __slots__ = ()
 
     @classmethod
-    def from_aptly_api(cls, repo, packages=None):
+    def from_aptly_api(cls, repo, packages=tuple()):
         """Create from instance of aply_api.Repo"""
         return cls(**repo._asdict(), packages=packages)
 
 
-class Snapshot(namedtuple(
+class Snapshot(
+    namedtuple(
         "Snapshot",
         ["name", "description", "created_at", "packages"],
-        defaults=[None, None, None]
-        )):
+        defaults=[None, None, None, tuple()],
+    )
+):
     """
     Represents snapshot in aptly with optional field packages which is best
     used when contains frozenset of Package instances
     """
+
     __slots__ = ()
 
     @classmethod
-    def from_aptly_api(cls, snapshot, packages=None):
+    def from_aptly_api(cls, snapshot, packages=tuple()):
         """Create from instance of aply_api.Snapshot"""
         return cls(**snapshot._asdict(), packages=packages)
