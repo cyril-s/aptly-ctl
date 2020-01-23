@@ -87,7 +87,7 @@ class TestAptly:
     def test_snapshot_create(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
         expexted_snapshot = Snapshot(repo.name, "description", None, frozenset())
-        created_snapshot = aptly.snapshot_create(
+        created_snapshot = aptly.snapshot_create_from_repo(
             repo.name, expexted_snapshot.name, expexted_snapshot.description,
         )
         assert expexted_snapshot == created_snapshot._replace(created_at=None)
@@ -96,14 +96,14 @@ class TestAptly:
 
     def test_snapshot_create_no_repo_error(self, aptly: aptly_ctl.aptly.Aptly):
         with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.snapshot_create(rand("repo"), rand("snap"))
+            aptly.snapshot_create_from_repo(rand("repo"), rand("snap"))
 
     def test_snapshot_create_same_name_error(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
         args = (repo.name, rand("snap"), "description")
-        aptly.snapshot_create(*args)
+        aptly.snapshot_create_from_repo(*args)
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.snapshot_create(*args)
+            aptly.snapshot_create_from_repo(*args)
 
     def test_snapshot_edit(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
@@ -113,7 +113,7 @@ class TestAptly:
         expected_snapshot = Snapshot(
             *edited_agrs, created_at=None, packages=frozenset()
         )
-        aptly.snapshot_create(repo.name, *orig_args)
+        aptly.snapshot_create_from_repo(repo.name, *orig_args)
         edited_snapshot = aptly.snapshot_edit(name, *edited_agrs)
         assert expected_snapshot == edited_snapshot._replace(created_at=None)
 
@@ -124,14 +124,14 @@ class TestAptly:
     def test_snapshot_edit_same_snapshot_name_error(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("repo"))
         snap1_name = rand("snap1")
-        snap1 = aptly.snapshot_create(repo.name, snap1_name)
-        snap2 = aptly.snapshot_create(repo.name, rand("snap"))
+        snap1 = aptly.snapshot_create_from_repo(repo.name, snap1_name)
+        snap2 = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
             aptly.snapshot_edit(snap2.name, new_name=snap1_name)
 
     def test_snapshot_delete(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
-        snap = aptly.snapshot_create(repo.name, rand("snap"))
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         aptly.snapshot_show(snap.name)
         aptly.snapshot_delete(snap.name)
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
@@ -143,13 +143,13 @@ class TestAptly:
 
     def test_repo_delete_without_force_error(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("repo"))
-        snap = aptly.snapshot_create(repo.name, rand("snap"))
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
             aptly.repo_delete(repo.name)
 
     def test_repo_delete_force(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("repo"))
-        snap = aptly.snapshot_create(repo.name, rand("snap"))
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         aptly.repo_delete(repo.name, force=True)
 
     # def test_snapshot_delete_without_force_error(self, aptly):
@@ -197,7 +197,7 @@ class TestAptly:
     def test_snapshot_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
-        snapshot = aptly.snapshot_create(repo.name, rand("test"))
+        snapshot = aptly.snapshot_create_from_repo(repo.name, rand("test"))
         searched_snapshot = aptly._search(snapshot)
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
         assert snapshot._replace(packages=expected_pkgs) == searched_snapshot
@@ -208,14 +208,14 @@ class TestAptly:
 
     def test_snapshot_search_bad_query(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
-        snapshot = aptly.snapshot_create(repo.name, rand("test"))
+        snapshot = aptly.snapshot_create_from_repo(repo.name, rand("test"))
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
             aptly._search(snapshot, query="Name (")
 
     def test_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
-        snapshot = aptly.snapshot_create(repo.name, rand("test"))
+        snapshot = aptly.snapshot_create_from_repo(repo.name, rand("test"))
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
         expected = [
             repo._replace(packages=expected_pkgs),
@@ -265,7 +265,7 @@ class TestAptly:
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
-        snap1 = aptly.snapshot_create(repo.name, rand("snap"),)
+        snap1 = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
         snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
         snap2 = aptly._search(snap2)
         assert snap2.packages == expected_pkgs
@@ -282,7 +282,7 @@ class TestAptly:
     ):
         snap_name = rand("snap")
         repo = aptly.repo_create(rand("test"))
-        snap1 = aptly.snapshot_create(repo.name, snap_name)
+        snap1 = aptly.snapshot_create_from_repo(repo.name, snap_name)
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
             aptly.snapshot_create_from_snapshots(snap_name, [snap1])
 

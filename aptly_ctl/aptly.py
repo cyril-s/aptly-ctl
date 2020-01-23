@@ -143,7 +143,7 @@ class Aptly:
         """Returns all snapshots as tuple of aptly_ctl.types.Snapshot"""
         return tuple(map(Snapshot.from_aptly_api, self.aptly.snapshots.list()))
 
-    def snapshot_create(
+    def snapshot_create_from_repo(
         self, repo_name: str, snapshot_name: str, description: str = None
     ) -> Snapshot:
         """
