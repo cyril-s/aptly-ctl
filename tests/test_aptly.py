@@ -285,3 +285,13 @@ class TestAptly:
         snap1 = aptly.snapshot_create(repo.name, snap_name)
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
             aptly.snapshot_create_from_snapshots(snap_name, [snap1])
+
+    def test_snapshot_create_from_packages(
+        self, aptly: aptly_ctl.aptly.Aptly, packages_simple
+    ):
+        repo = aptly.repo_create(rand("test"))
+        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
+        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
+        snap = aptly.snapshot_create_from_packages(rand("snap"), packages_simple)
+        search_result = aptly._search(snap)
+        assert search_result.packages == expected_pkgs

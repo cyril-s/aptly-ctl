@@ -196,6 +196,21 @@ class Aptly:
         else:
             return Snapshot.from_aptly_api(snap)
 
+    def snapshot_create_from_packages(
+        self, name: str, pkgs: Sequence[Package], description: str = None
+    ) -> Snapshot:
+        pkg_keys = [pkg.key for pkg in pkgs]
+        try:
+            snap = self.aptly.snapshots.create_from_packages(
+                snapshotname=name, description=description, package_refs=pkg_keys,
+            )
+        except AptlyAPIException as exc:
+            if exc.status_code in [400, 404]:
+                raise InvalidOperationError(str(exc))
+            raise
+        else:
+            return Snapshot.from_aptly_api(snap)
+
     def snapshot_edit(
         self, name: str, new_name: str = None, new_description: str = None
     ) -> Snapshot:
