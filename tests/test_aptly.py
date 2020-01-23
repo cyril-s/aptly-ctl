@@ -262,3 +262,30 @@ class TestAptly:
         errors = aptly.remove(repo)
         assert len(errors) == 1
         assert isinstance(errors[0][1], aptly_ctl.exceptions.RepoNotFoundError)
+
+    def test_snapshot_create_from_snapshot(
+        self, aptly: aptly_ctl.aptly.Aptly, packages_simple
+    ):
+        repo = aptly.repo_create(rand("test"))
+        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
+        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
+        snap1 = aptly.snapshot_create(repo.name, rand("snap"),)
+        snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
+        snap2 = aptly.snapshot_search(snap2)
+        assert snap2.packages == expected_pkgs
+
+    def test_snapshot_create_from_snapshot_no_source(
+        self, aptly: aptly_ctl.aptly.Aptly
+    ):
+        snap = Snapshot(rand("snap"))
+        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
+            aptly.snapshot_create_from_snapshots(rand("snap"), [snap])
+
+    def test_snapshot_create_from_snapshot_same_name_error(
+        self, aptly: aptly_ctl.aptly.Aptly
+    ):
+        snap_name = rand("snap")
+        repo = aptly.repo_create(rand("test"))
+        snap1 = aptly.snapshot_create(repo.name, snap_name)
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.snapshot_create_from_snapshots(snap_name, [snap1])

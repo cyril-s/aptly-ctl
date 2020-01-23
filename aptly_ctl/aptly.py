@@ -3,7 +3,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from itertools import product
-from typing import Tuple, Union, Iterable, List, Optional, Dict
+from typing import Tuple, Union, Iterable, List, Optional, Dict, Sequence
 from aptly_api import Client, AptlyAPIException
 from aptly_ctl.exceptions import (
     AptlyCtlError,
@@ -220,6 +220,28 @@ class Aptly:
                 "Created snapshot '%s' from local repo '%s'", snapshot_name, repo_name
             )
             return Snapshot.from_aptly_api(snapshot)
+
+    def snapshot_create_from_snapshots(
+        self, name: str, sources: Sequence[Snapshot], description: str = None
+    ) -> Snapshot:
+        snapshots, errors = self.search(snapshots=sources)
+        if errors:
+            raise errors[0]
+        snap_names = [snap.name for snap in sources]
+        pkg_keys = [pkg.key for snap in snapshots for pkg in snap.packages]
+        try:
+            snap = self.aptly.snapshots.create_from_packages(
+                snapshotname=name,
+                description=description,
+                source_snapshots=snap_names,
+                package_refs=pkg_keys,
+            )
+        except AptlyAPIException as exc:
+            if exc.status_code in [400, 404]:
+                raise InvalidOperationError(str(exc))
+            raise
+        else:
+            return Snapshot.from_aptly_api(snap)
 
     def snapshot_edit(
         self, name: str, new_name: str = None, new_description: str = None
