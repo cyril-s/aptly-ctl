@@ -181,40 +181,36 @@ class TestAptly:
     def test_repo_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
-        searched_repo = aptly.repo_search(repo)
+        searched_repo = aptly._search(repo)
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
         assert repo._replace(packages=expected_pkgs) == searched_repo
 
     def test_repo_search_no_repo(self, aptly: aptly_ctl.aptly.Aptly):
         with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.repo_search(rand("test"))
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.repo_search(Repo(rand("test")))
+            aptly._search(Repo(rand("test")))
 
     def test_repo_search_bad_query(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.repo_search(repo, query="Name (")
+            aptly._search(repo, query="Name (")
 
     def test_snapshot_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
         snapshot = aptly.snapshot_create(repo.name, rand("test"))
-        searched_snapshot = aptly.snapshot_search(snapshot)
+        searched_snapshot = aptly._search(snapshot)
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
         assert snapshot._replace(packages=expected_pkgs) == searched_snapshot
 
     def test_snapshot_search_no_snapshot(self, aptly: aptly_ctl.aptly.Aptly):
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly.snapshot_search(rand("test"))
-        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly.snapshot_search(Snapshot(rand("test")))
+            aptly._search(Snapshot(rand("test")))
 
     def test_snapshot_search_bad_query(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
         snapshot = aptly.snapshot_create(repo.name, rand("test"))
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.snapshot_search(snapshot, query="Name (")
+            aptly._search(snapshot, query="Name (")
 
     def test_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
@@ -226,7 +222,7 @@ class TestAptly:
             snapshot._replace(packages=expected_pkgs),
         ]
 
-        result, errors = aptly.search([repo], [snapshot])
+        result, errors = aptly.search([repo, snapshot])
         assert len(result) == 2
         assert len(errors) == 0
         assert set(result) == set(expected)
@@ -241,7 +237,7 @@ class TestAptly:
             repo._replace(packages=expected_pkgs),
         ]
 
-        result, errors = aptly.search([repo], [rand("snap")])
+        result, errors = aptly.search([repo, Snapshot(rand("snap"))])
         assert len(result) == 1
         assert len(errors) == 1
         assert set(result) == set(expected)
@@ -250,11 +246,11 @@ class TestAptly:
     def test_remove(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
-        expected = aptly.repo_search(repo, query="!aptly")
-        to_delete = aptly.repo_search(repo, query="aptly")
+        expected = aptly._search(repo, query="!aptly")
+        to_delete = aptly._search(repo, query="aptly")
         errors = aptly.remove(to_delete)
         assert len(errors) == 0
-        remaining = aptly.repo_search(repo)
+        remaining = aptly._search(repo)
         assert remaining == expected
 
     def test_remove_fail(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
@@ -271,7 +267,7 @@ class TestAptly:
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
         snap1 = aptly.snapshot_create(repo.name, rand("snap"),)
         snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
-        snap2 = aptly.snapshot_search(snap2)
+        snap2 = aptly._search(snap2)
         assert snap2.packages == expected_pkgs
 
     def test_snapshot_create_from_snapshot_no_source(

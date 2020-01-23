@@ -3,7 +3,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from itertools import product
-from typing import Tuple, Union, Iterable, List, Optional, Dict, Sequence
+from typing import Tuple, Iterable, List, Optional, Dict, Sequence, Union
 from aptly_api import Client, AptlyAPIException
 from aptly_ctl.exceptions import (
     AptlyCtlError,
@@ -11,7 +11,7 @@ from aptly_ctl.exceptions import (
     InvalidOperationError,
     SnapshotNotFoundError,
 )
-from aptly_ctl.types import Package, Repo, Snapshot
+from aptly_ctl.types import Package, Repo, Snapshot, PackageContainer, PackageContainers
 
 logger = logging.getLogger(__name__)
 
@@ -122,53 +122,6 @@ class Aptly:
         else:
             logger.info("Deleted repo %s", name)
 
-    def repo_search(
-        self,
-        repo: Union[str, Repo],
-        query: str = None,
-        with_depls: bool = False,
-        details: bool = False,
-    ) -> Repo:
-        """
-        Search packages in local repo using query and return
-        aptly_ctl.types.Repo with packages attribute set to frozen set of
-        aptly_ctl.types.Package or empty frozenset if nothing was found.
-
-        Arguments:
-            repo -- local repo name as string or aptly_ctl.types.Repo.
-                    In latter case aptly_ctl.types.Repo instance is reused
-                    without making extra roundtrip
-
-        Keyword arguments:
-            query -- optional search query. By default lists all packages
-            with_depls -- if True, also returns dependencies of packages
-                          matched in query
-            details -- fill in 'fields' attribute of returned
-                       aptly_ctl.types.Package instances
-
-        Raises AptlyCtlError is query is bad or repo does not exist.
-        """
-        # reuse Repo instance instead of extra roundtrip
-        if not isinstance(repo, Repo):
-            repo = self.repo_show(repo)
-        try:
-            pkgs = self.aptly.repos.search_packages(
-                repo.name, query, with_depls, details
-            )
-        except AptlyAPIException as exc:
-            emsg = exc.args[0]
-            if exc.status_code == 400 and "parsing failed:" in emsg.lower():
-                _, _, fail_desc = emsg.partition(":")
-                raise InvalidOperationError(
-                    'Bad query "{}":{}'.format(query, fail_desc)
-                )
-            if exc.status_code == 404:
-                raise RepoNotFoundError(repo.name)
-            raise
-        return repo._replace(
-            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
-        )
-
     def snapshot_show(self, name: str) -> Snapshot:
         """
         Returns aptly_ctl.types.Snapshot representing snapshot 'name' or
@@ -224,7 +177,7 @@ class Aptly:
     def snapshot_create_from_snapshots(
         self, name: str, sources: Sequence[Snapshot], description: str = None
     ) -> Snapshot:
-        snapshots, errors = self.search(snapshots=sources)
+        snapshots, errors = self.search(sources)
         if errors:
             raise errors[0]
         snap_names = [snap.name for snap in sources]
@@ -297,53 +250,6 @@ class Aptly:
         else:
             logger.info("Deleted snapshot %s", name)
 
-    def snapshot_search(
-        self,
-        snapshot: Union[str, Snapshot],
-        query: str = None,
-        with_depls: bool = False,
-        details: bool = False,
-    ) -> Snapshot:
-        """
-        Search packages in snapshot using query and return
-        aptly_ctl.types.Snapshot with packages attribute set to frozen set of
-        aptly_ctl.types.Package or empty frozenset if nothing was found.
-
-        Arguments:
-            snapshot -- snapshot name as string or aptly_ctl.types.Snapshot.
-                        In latter case aptly_ctl.types.Snapshot instance is
-                        reused without making extra roundtrip
-
-        Keyword arguments:
-            query -- optional search query. By default lists all packages
-            with_depls -- if True, also returns dependencies of packages
-                          matched in query
-            details -- fill in 'fields' attribute of returned
-                       aptly_ctl.types.Package instances
-
-        Raises AptlyCtlError is query is bad or snapshot does not exist.
-        """
-        # reuse Snapshot instance instead of extra roundtrip
-        if not isinstance(snapshot, Snapshot):
-            snapshot = self.snapshot_show(snapshot)
-        try:
-            pkgs = self.aptly.snapshots.list_packages(
-                snapshot.name, query, with_depls, details
-            )
-        except AptlyAPIException as exc:
-            emsg = exc.args[0]
-            if exc.status_code == 400 and "parsing failed:" in emsg.lower():
-                _, _, fail_desc = emsg.partition(":")
-                raise InvalidOperationError(
-                    'Bad query "{}":{}'.format(query, fail_desc)
-                )
-            if exc.status_code == 404:  # snapshot not found
-                raise SnapshotNotFoundError(snapshot.name)
-            raise
-        return snapshot._replace(
-            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
-        )
-
     def snapshot_diff(
         self, snap1: str, snap2: str
     ) -> List[Tuple[Optional[Package], Optional[Package]]]:
@@ -357,66 +263,86 @@ class Aptly:
             out.append((left, right))
         return out
 
+    def _search(
+        self,
+        container: PackageContainer,
+        query: str = None,
+        with_depls: bool = False,
+        details: bool = False,
+    ) -> PackageContainer:
+        """
+        Search packages in PackageContainer (Repo or Snapshot) using query and
+        return PackageContainer instance with 'package' attribute set to search
+        result.
+
+        Arguments:
+            container -- Snapshot or Repo instance
+
+        Keyword arguments:
+            query -- optional search query. By default lists all packages
+            with_depls -- if True, also returns dependencies of packages
+                          matched in query
+            details -- fill in 'fields' attribute of returned Package instances
+
+        Raises RepoNotFoundError or SnapshotNotFoundError if container was not
+        found, and InvalidOperationError if query is invalid.
+        """
+        if isinstance(container, Repo):
+            search_func = self.aptly.repos.search_packages
+        elif isinstance(container, Snapshot):
+            search_func = self.aptly.snapshots.list_packages
+        else:
+            raise TypeError("Unexpected type '{}'".format(type(container)))
+        try:
+            pkgs = search_func(container.name, query, with_depls, details)
+        except AptlyAPIException as exc:
+            emsg = exc.args[0]
+            if exc.status_code == 400 and "parsing failed:" in emsg.lower():
+                _, _, fail_desc = emsg.partition(":")
+                raise InvalidOperationError(
+                    'Bad query "{}":{}'.format(query, fail_desc)
+                )
+            if exc.status_code == 404:
+                if isinstance(container, Repo):
+                    raise RepoNotFoundError(container.name)
+                if isinstance(container, Snapshot):
+                    raise SnapshotNotFoundError(container.name)
+            raise
+        return container._replace(
+            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
+        )
+
     def search(
         self,
-        repos: Iterable = tuple(),
-        snapshots: Iterable = tuple(),
-        queries: Iterable = None,
+        targets: Sequence[PackageContainers],
+        queries: Union[Sequence[str], Sequence[None]] = None,
         with_deps: bool = False,
         details: bool = False,
-    ) -> Tuple[List[Union[Repo, Snapshot]], List[Exception]]:
+    ) -> Tuple[List[PackageContainers], List[Exception]]:
         """
-        Search list of queries in aptly local repos in parallel and return
-        tuple of aptly_ctl.types.Repo's list with found packages and list of
+        Search list of queries in aptly local repos and snapshots in parallel
+        and return tuple of PackageContainers list with found packages and list of
         exceptions encountered during search
 
         Keyword arguments:
-            repos -- local repos names as list of strings or '*' to search in
-                     in every local repo
-            snapshots -- snapshots names as list of strings or '*' to search in
-                         every snapshot
+            targets -- PackageContainers (Snapshots and Repos) instances
             queries -- list of search queries. By default lists all packages
-            with_depls -- if True, also returns dependencies of packages
-                          matched in query
-            details -- fill in 'fields' attribute of returned
-                       aptly_ctl.types.Package instances
-
-        If repos and snapshots are both not supplied, this is the same as
-        repos='*', snapshots='*'
-
-        Returns: tuple (result, erros), where
-            result -- list of aptly_ctl.types.Repo and aptly_ctl.types.Snapshot
-                instances with packages attribute set to the query result
-            errors -- list of exceptions occured during search
+            with_depls -- return dependencies of packages matched in query
+            details -- fill in 'fields' attribute of returned Package instances
         """
-        queries = tuple(queries) if queries else (None,)
-        if not (repos or snapshots):
-            repos = self.repo_list()
-            snapshots = self.snapshot_list()
-        else:
-            if repos == "*":
-                repos = self.repo_list()
-            if snapshots == "*":
-                snapshots = self.snapshot_list()
-
-        results = {}  # type: Dict[Union[Repo, Snapshot], set]
+        queries = queries[:] if queries else [None]
+        results = {}  # type: Dict[PackageContainers, set]
         futures = []
         errors = []
         with ThreadPoolExecutor(max_workers=self.max_workers) as exe:
             try:
-                for repo, query in product(repos, queries):
+                for target, query in product(targets, queries):
                     futures.append(
-                        exe.submit(self.repo_search, repo, query, with_deps, details)
-                    )
-                for snapshot, query in product(snapshots, queries):
-                    futures.append(
-                        exe.submit(
-                            self.snapshot_search, snapshot, query, with_deps, details
-                        )
+                        exe.submit(self._search, target, query, with_deps, details)
                     )
                 for future in as_completed(futures, 300):
                     try:
-                        container = future.result()
+                        container = future.result()  # type: PackageContainers
                         if container.packages:
                             key = container._replace(packages=frozenset())
                             results.setdefault(key, set()).update(container.packages)
@@ -435,7 +361,7 @@ class Aptly:
         result = []
         for container, pkgs in results.items():
             result.append(container._replace(packages=frozenset(pkgs)))
-        return (result, errors)
+        return result, errors
 
     def put(
         self,

@@ -128,10 +128,7 @@ class Package(typing.NamedTuple):
 
 
 class Repo(typing.NamedTuple):
-    """
-    Represents local repo in aptly with optional field packages which is best
-    used when contains frozenset of Package instances
-    """
+    """Represents local repo in aptly"""
 
     name: str
     comment: typing.Optional[str] = None
@@ -154,10 +151,7 @@ class Repo(typing.NamedTuple):
 
 
 class Snapshot(typing.NamedTuple):
-    """
-    Represents snapshot in aptly with optional field packages which is best
-    used when contains frozenset of Package instances
-    """
+    """Represents snapshot in aptly"""
 
     name: str
     description: typing.Optional[str] = None
@@ -177,3 +171,7 @@ class Snapshot(typing.NamedTuple):
             created_at=snapshot.created_at,
             packages=packages,
         )
+
+
+PackageContainer = typing.TypeVar("PackageContainer", Repo, Snapshot)
+PackageContainers = typing.Union[Repo, Snapshot]
