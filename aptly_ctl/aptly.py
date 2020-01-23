@@ -3,6 +3,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from itertools import product
+from typing import Tuple, Union, Iterable, List, Optional, Dict
 from aptly_api import Client, AptlyAPIException
 from aptly_ctl.exceptions import (
     AptlyCtlError,
@@ -18,11 +19,11 @@ logger = logging.getLogger(__name__)
 class Aptly:
     """Aptly API client with more convenient commands"""
 
-    def __init__(self, url, max_workers=10):
+    def __init__(self, url: str, max_workers: int = 10) -> None:
         self.aptly = Client(url)
         self.max_workers = max_workers
 
-    def repo_show(self, name):
+    def repo_show(self, name: str) -> Repo:
         """
         Returns aptly_ctl.types.Repo representing local repo 'name' or
         raises AtplyCtlError if such local repo does not exist
@@ -39,11 +40,13 @@ class Aptly:
         else:
             return Repo.from_aptly_api(show_result)
 
-    def repo_list(self):
+    def repo_list(self) -> Tuple[Repo, ...]:
         """Returns all local repos as tuple of aptly_ctl.types.Repo"""
         return tuple(map(Repo.from_aptly_api, self.aptly.repos.list()))
 
-    def repo_create(self, name, comment=None, dist=None, comp=None):
+    def repo_create(
+        self, name: str, comment: str = None, dist: str = None, comp: str = None
+    ) -> Repo:
         """
         Creates new repo 'name'. Raises AtplyCtlEror if such repo exists
 
@@ -66,7 +69,9 @@ class Aptly:
             logger.info("Created repo %s", create_result)
             return Repo.from_aptly_api(create_result)
 
-    def repo_edit(self, name, comment=None, dist=None, comp=None):
+    def repo_edit(
+        self, name: str, comment: str = None, dist: str = None, comp: str = None
+    ) -> Repo:
         """
         Modifies local repo named 'name'. Raises AptlyCtlError if there is no
         repo named 'name' or no fields to modify were supplied
@@ -93,7 +98,7 @@ class Aptly:
             logger.info("Edited repo: %s", edit_result)
             return Repo.from_aptly_api(edit_result)
 
-    def repo_delete(self, name, force=False):
+    def repo_delete(self, name: str, force: bool = False) -> None:
         """
         Delete repo named 'name'. Raises AptlyCtlError if there is no such repo
         or when trying to delete repo pointed by snapshot with force=False
@@ -117,7 +122,13 @@ class Aptly:
         else:
             logger.info("Deleted repo %s", name)
 
-    def repo_search(self, repo, query=None, with_depls=False, details=False):
+    def repo_search(
+        self,
+        repo: Union[str, Repo],
+        query: str = None,
+        with_depls: bool = False,
+        details: bool = False,
+    ) -> Repo:
         """
         Search packages in local repo using query and return
         aptly_ctl.types.Repo with packages attribute set to frozen set of
@@ -151,14 +162,14 @@ class Aptly:
                 raise InvalidOperationError(
                     'Bad query "{}":{}'.format(query, fail_desc)
                 )
-            elif exc.status_code == 404:
+            if exc.status_code == 404:
                 raise RepoNotFoundError(repo.name)
             raise
         return repo._replace(
             packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
         )
 
-    def snapshot_show(self, name):
+    def snapshot_show(self, name: str) -> Snapshot:
         """
         Returns aptly_ctl.types.Snapshot representing snapshot 'name' or
         raises AtplyCtlError if such snapshot does not exist
@@ -175,17 +186,19 @@ class Aptly:
         else:
             return Snapshot.from_aptly_api(snapshot)
 
-    def snapshot_list(self):
+    def snapshot_list(self) -> Tuple[Snapshot, ...]:
         """Returns all snapshots as tuple of aptly_ctl.types.Snapshot"""
         return tuple(map(Snapshot.from_aptly_api, self.aptly.snapshots.list()))
 
-    def snapshot_create(self, repo_name, snapshot_name, description=None):
+    def snapshot_create(
+        self, repo_name: str, snapshot_name: str, description: str = None
+    ) -> Snapshot:
         """
-        Create snapshot named 'snapshotname' from local repo named 'name'
+        Create snapshot from local repo
 
         Arguments:
-            name -- local repo name to snapshot
-            snapshotname -- new snapshot name
+            repo_name -- local repo name to snapshot
+            snapshot_name -- new snapshot name
 
         Keyword arguments:
             description -- optional human-readable description string
@@ -208,7 +221,9 @@ class Aptly:
             )
             return Snapshot.from_aptly_api(snapshot)
 
-    def snapshot_edit(self, name, new_name=None, new_description=None):
+    def snapshot_edit(
+        self, name: str, new_name: str = None, new_description: str = None
+    ) -> Snapshot:
         """
         Modifies snapshot named 'name'. Raises AptlyCtlError if there is no
         snapshot named 'name' or no fields to modify were supplied
@@ -235,7 +250,7 @@ class Aptly:
             logger.info("Edited snapshot %s: %s", name, snapshot)
             return Snapshot.from_aptly_api(snapshot)
 
-    def snapshot_delete(self, name, force=False):
+    def snapshot_delete(self, name: str, force: bool = False) -> None:
         """
         Delete snapshot named 'name'. Raises AptlyCtlError if there is no such
         snapshot or when trying to delete snapshot that has references to it
@@ -260,7 +275,13 @@ class Aptly:
         else:
             logger.info("Deleted snapshot %s", name)
 
-    def snapshot_search(self, snapshot, query=None, with_depls=False, details=False):
+    def snapshot_search(
+        self,
+        snapshot: Union[str, Snapshot],
+        query: str = None,
+        with_depls: bool = False,
+        details: bool = False,
+    ) -> Snapshot:
         """
         Search packages in snapshot using query and return
         aptly_ctl.types.Snapshot with packages attribute set to frozen set of
@@ -294,14 +315,16 @@ class Aptly:
                 raise InvalidOperationError(
                     'Bad query "{}":{}'.format(query, fail_desc)
                 )
-            elif exc.status_code == 404:  # snapshot not found
-                raise SnapshotNotFoundError(snapshot)
+            if exc.status_code == 404:  # snapshot not found
+                raise SnapshotNotFoundError(snapshot.name)
             raise
         return snapshot._replace(
             packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
         )
 
-    def snapshot_diff(self, snap1, snap2):
+    def snapshot_diff(
+        self, snap1: str, snap2: str
+    ) -> List[Tuple[Optional[Package], Optional[Package]]]:
         """
         Show diff between 2 snapshots
         """
@@ -314,12 +337,12 @@ class Aptly:
 
     def search(
         self,
-        repos=tuple(),
-        snapshots=tuple(),
-        queries=None,
-        with_deps=False,
-        details=False,
-    ):
+        repos: Iterable = tuple(),
+        snapshots: Iterable = tuple(),
+        queries: Iterable = None,
+        with_deps: bool = False,
+        details: bool = False,
+    ) -> Tuple[List[Union[Repo, Snapshot]], List[Exception]]:
         """
         Search list of queries in aptly local repos in parallel and return
         tuple of aptly_ctl.types.Repo's list with found packages and list of
@@ -354,7 +377,9 @@ class Aptly:
             if snapshots == "*":
                 snapshots = self.snapshot_list()
 
-        futures, results, errors = [], {}, []
+        results = {}  # type: Dict[Union[Repo, Snapshot], set]
+        futures = []
+        errors = []
         with ThreadPoolExecutor(max_workers=self.max_workers) as exe:
             try:
                 for repo, query in product(repos, queries):
@@ -371,7 +396,7 @@ class Aptly:
                     try:
                         container = future.result()
                         if container.packages:
-                            key = container._replace(packages=None)
+                            key = container._replace(packages=frozenset())
                             results.setdefault(key, set()).update(container.packages)
                     except Exception as exc:
                         errors.append(exc)
@@ -390,7 +415,12 @@ class Aptly:
             result.append(container._replace(packages=frozenset(pkgs)))
         return (result, errors)
 
-    def put(self, local_repos, packages, force_replace=False):
+    def put(
+        self,
+        local_repos: Iterable[str],
+        packages: Iterable[str],
+        force_replace: bool = False,
+    ) -> Tuple[List[Repo], List[Repo], List[Exception]]:
         """
         Upload packages from local filesystem to aptly server,
         put them into local_repos
@@ -421,7 +451,9 @@ class Aptly:
         except OSError as exc:
             raise AptlyCtlError("Failed to load package: {}".format(exc))
 
-        def worker(repo, pkgs, directory, force_replace):
+        def worker(
+            repo: Repo, pkgs: Iterable[Package], directory: str, force_replace: bool
+        ) -> Tuple[Repo, Repo]:
             addition = self.aptly.repos.add_uploaded_file(
                 repo.name,
                 directory,
@@ -490,7 +522,7 @@ class Aptly:
 
         return (added, failed, errors)
 
-    def remove(self, *repos):
+    def remove(self, *repos: Repo) -> List[Tuple[Repo, RepoNotFoundError]]:
         """
         Deletes packages from local repo
 

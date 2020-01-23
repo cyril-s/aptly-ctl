@@ -14,10 +14,10 @@ class NotFoundError(AptlyCtlError):
 
     entity_name = ""
 
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             "{} '{}' not found".format(self.entity_name, self.name)
             .capitalize()
@@ -46,8 +46,8 @@ class InvalidOperationError(AptlyCtlError):
         description -- of invalid operation
     """
 
-    def __init__(self, description):
+    def __init__(self, description: str) -> None:
         self.description = description
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Invalid operation: {}".format(self.description)

@@ -1,15 +1,22 @@
 from functools import total_ordering
 import logging
+from typing import Any, Iterable, Callable, Dict, List, ClassVar, Tuple, TypeVar
+
 try:
     import apt
+
     system_ver_compare = True
 except ImportError:
     system_ver_compare = False
 
 logger = logging.getLogger(__name__)
 
+StrOrInt = TypeVar("StrOrInt", str, int)
 
-def rotate(key_fmt, sort_func, n, seq):
+
+def rotate(
+    key_fmt: str, sort_func: Callable[[Any], Any], n: int, seq: Iterable,
+) -> List[Any]:
     """
     Returns items in seq to rotate according to configured policy.
     seq is divided in groups by a hash key which is derived from
@@ -19,13 +26,13 @@ def rotate(key_fmt, sort_func, n, seq):
     If n < 0 these items are returned for a group.
     key_fmt is a python format string. Each item is passed to it as 'o' attribute.
     """
-    h = {}
+    h = {}  # type: Dict[str, List[Any]]
     for item in seq:
         h.setdefault(key_fmt.format(o=item), []).append(item)
     for k, v in h.items():
         v.sort(key=sort_func)
         N = min(len(v), abs(n))
-        h[k] = v[:len(v)-N] if n >= 0 else v[len(v)-N:]
+        h[k] = v[: len(v) - N] if n >= 0 else v[len(v) - N :]
     return list(sum(h.values(), []))
 
 
@@ -37,15 +44,27 @@ class DebianVersion:
     Throws ValueError if version format is incorrect.
     """
 
-    def __init__(self, version):
+    upstream_version_allowed_chars: ClassVar[Tuple[str, ...]] = (
+        ".",
+        "+",
+        "~",
+        "-",
+        ":",
+    )
+    revision_allowed_chars: ClassVar[Tuple[str, ...]] = (".", "+", "~")
 
-        self.upstream_version_allowed_chars = (".", "+", "~", "-", ":")
-        self.revision_allowed_chars = (".", "+", "~")
+    version: str
+    epoch: int
+    upstream_version: str
+    revision: str
 
+    def __init__(self, version: str) -> None:
         for i, c in enumerate(version):
             if ord(c) > 127:
-                raise ValueError("Non-ASCII symbols in debian version is nonsense." \
-                        + "Position {}, code porint '{:x}'.".format(i, ord(c)))
+                raise ValueError(
+                    "Non-ASCII symbols in debian version is nonsense."
+                    + "Position {}, code porint '{:x}'.".format(i, ord(c))
+                )
 
         # strip epoch
         epoch, sep, upstream_version_revision = version.partition(":")
@@ -66,56 +85,77 @@ class DebianVersion:
 
         # check syntax
         if not epoch.isdecimal():
-            raise ValueError("Version '{}'  has incorrect epoch '{}'.".format(version, epoch))
+            raise ValueError(
+                "Version '{}'  has incorrect epoch '{}'.".format(version, epoch)
+            )
 
         if len(upstream_version) == 0 or not upstream_version[0].isdecimal():
-            raise ValueError("Version '{}' contains incorrect upstream version '{}'.".format(version, upstream_version) \
-                + " Upstream version is obligatory and must start with a digit.")
+            raise ValueError(
+                "Version '{}' contains incorrect upstream version '{}'.".format(
+                    version, upstream_version
+                )
+                + " Upstream version is obligatory and must start with a digit."
+            )
 
         for i, c in enumerate(upstream_version):
             if not c.isalnum() and c not in self.upstream_version_allowed_chars:
-                raise ValueError("Upsream version '{}' of version '{}'".format(upstream_version, version) \
-                    + " contains illegal character (position {}, code point {:X}).".format(i, ord(c)))
+                raise ValueError(
+                    "Upsream version '{}' of version '{}'".format(
+                        upstream_version, version
+                    )
+                    + " contains illegal character (position {}, code point {:X}).".format(
+                        i, ord(c)
+                    )
+                )
 
         if len(revision) == 0:
-            raise ValueError("Debian revision '{}' of version '{}' is empty.".format(revision, version))
+            raise ValueError(
+                "Debian revision '{}' of version '{}' is empty.".format(
+                    revision, version
+                )
+            )
 
         for i, c in enumerate(revision):
             if not c.isalnum() and c not in self.revision_allowed_chars:
-                raise ValueError("Debian revision '{}' of version '{}'".format(revision, version) \
-                        + " contains illegal character (position {}, code point {:X}).".format(i, ord(c)))
+                raise ValueError(
+                    "Debian revision '{}' of version '{}'".format(revision, version)
+                    + " contains illegal character (position {}, code point {:X}).".format(
+                        i, ord(c)
+                    )
+                )
 
         self.version = version
         self.epoch = int(epoch)
         self.upstream_version = upstream_version
         self.revision = revision
 
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "".join(map(str, self._hashable_tuple))
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.version
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, DebianVersion):
+            raise NotImplemented
         return self.__cmp__(other) == 0
 
-    def __lt__(self, other):
+    def __lt__(self, other: "DebianVersion") -> bool:
         return self.__cmp__(other) < 0
 
-    def __cmp__(self, other):
+    def __cmp__(self, other: "DebianVersion") -> int:
         if system_ver_compare:
             return apt.apt_pkg.version_compare(self.version, other.version)
         else:
             return self.version_compare(other)
 
     @property
-    def _hashable_tuple(self):
-        parts = [ self.epoch, ":" ]
-        for c, s in enumerate([ self.upstream_version, "-" ,self.revision ]):
+    def _hashable_tuple(self) -> Tuple[object, ...]:
+        parts = [self.epoch, ":"]
+        for c, s in enumerate([self.upstream_version, "-", self.revision]):
             i = 0
             while len(s) > 0:
-                decimal = (i % 2 == 1)
+                decimal = i % 2 == 1
                 part, s = self._get_part(s, decimal)
                 parts.append(part)
                 i += 1
@@ -124,11 +164,10 @@ class DebianVersion:
                     parts.append("0")
         return tuple(parts)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self._hashable_tuple)
 
-
-    def _order(self, c):
+    def _order(self, c: str) -> int:
         if c.isdecimal():
             return 0
         elif c.isalpha():
@@ -140,29 +179,31 @@ class DebianVersion:
         else:
             return 0
 
-    def _get_empty_str_on_index_error(self, arr, index):
+    def _get_empty_str_on_index_error(self, arr: List[str], index: int) -> str:
         try:
             return arr[index]
         except IndexError:
             return ""
 
-    def _compare_parts(self, a, b, decimal):
+    def _compare_parts(self, a: StrOrInt, b: StrOrInt, decimal: bool) -> int:
         if decimal:
             return int(a) - int(b)
+        i = 0
+        while i < (min(len(a), len(b)) + 1):
+            res = self._order(self._get_empty_str_on_index_error(a, i)) - self._order(
+                self._get_empty_str_on_index_error(b, i)
+            )
+            if res != 0:
+                return res
+            i += 1
         else:
-            i = 0
-            while i < (min(len(a), len(b)) + 1):
-                res = self._order(self._get_empty_str_on_index_error(a, i)) \
-                        - self._order(self._get_empty_str_on_index_error(b, i))
-                if res != 0:
-                    return res
-                i += 1
-            else:
-                return 0
+            return 0
 
-    def _get_part(self, s, decimal):
-        "Strips first part of string containing either non-decimal or decimal characters." \
-        + " Returns tuple (part, remider)."
+    def _get_part(self, s: str, decimal: bool) -> Tuple[str, str]:
+        """
+        Strips first part of string containing either non-decimal or decimal characters.
+        Returns tuple (part, remider).
+        """
         div = 0
         for c in s:
             if decimal and not c.isdecimal():
@@ -177,9 +218,11 @@ class DebianVersion:
         else:
             return (s[:div], s[div:])
 
-    def version_compare(self, other):
-        "Compares version of the form [epoch:]upstream-version[-debian-revision]" \
-        + " according to Debian package version number format."
+    def version_compare(self, other: "DebianVersion") -> int:
+        """
+        Compares version of the form [epoch:]upstream-version[-debian-revision]
+        according to Debian package version number format.
+        """
 
         # compare epoch
         diff = self.epoch - other.epoch
@@ -187,10 +230,13 @@ class DebianVersion:
             return diff
 
         # compare upstream version and debian revision
-        for slf, othr in (self.upstream_version, other.upstream_version), (self.revision, other.revision):
+        for slf, othr in (
+            (self.upstream_version, other.upstream_version),
+            (self.revision, other.revision),
+        ):
             i = 0
             while len(slf) > 0 or len(othr) > 0:
-                decimal = (i % 2 == 1)
+                decimal = i % 2 == 1
                 slf_part, slf = self._get_part(slf, decimal=decimal)
                 othr_part, othr = self._get_part(othr, decimal=decimal)
                 diff = self._compare_parts(slf_part, othr_part, decimal=decimal)

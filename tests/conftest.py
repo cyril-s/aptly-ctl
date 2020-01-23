@@ -14,4 +14,4 @@ def no_requests(monkeypatch):
 def packages_simple():
     pkgs_dir = os.path.realpath("tests/packages/simple")
     pkgs = (os.path.join(pkgs_dir, pkg) for pkg in os.listdir(pkgs_dir))
-    return tuple(Package.from_file(pkg) for pkg in pkgs)
+    return frozenset(Package.from_file(pkg) for pkg in pkgs)
