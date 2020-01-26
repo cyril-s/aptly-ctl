@@ -17,7 +17,7 @@ KEY_REGEXP = re.compile(r"(\w*?)P(\w+) (\S+) (\S+) (\w+)$")
 DIR_REF_REGEXP = re.compile(r"(\S+?)_(\S+?)_(\w+)")
 
 
-def read_control_file_lines(package_path: str) -> str:
+def read_control_file_lines(package_path: str) -> typing.Iterator[str]:
     """Yields lines of control file from debian package"""
     with open(package_path, "rb") as package_file:
         ar_archive = unix_ar.open(package_file)
@@ -29,7 +29,7 @@ def read_control_file_lines(package_path: str) -> str:
             raise ValueError("Failed to find control archive inside debian package")
         with ar_archive.open(ar_member_filename) as ar_member_file:
             with tarfile.open(fileobj=ar_member_file) as tar_file:
-                with tar_file.extractfile("./control") as control_file:
+                with tar_file.extractfile("./control") as control_file:  # type: ignore
                     for line in control_file:
                         yield line.decode("utf-8", errors="replace").rstrip()
 
