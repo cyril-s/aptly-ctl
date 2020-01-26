@@ -437,8 +437,6 @@ class Aptly:
                     failed_pkgs.append(pkg)
                 else:
                     added_pkgs.append(pkg)
-            # FIXME aptly_ctl.types.Package.from_file implementation is incomplete
-            # and will allow such errors to occur
             if added:
                 logger.warning(
                     "Output is incomplete! These packages %s %s",

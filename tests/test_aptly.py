@@ -175,8 +175,29 @@ class TestAptly:
         with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
             aptly.put(repos, [pkg.file.origpath for pkg in packages_simple])
 
-    # def test_put_conflict_error
-    # def test_put_force_replace
+    def test_put_conflict_error(self, aptly: aptly_ctl.aptly.Aptly, packages_conflict):
+        pkgs = [pkg.file.origpath for pkg in packages_conflict]
+        repo = aptly.repo_create(rand("repo"))
+        added, failed, errors = aptly.put([repo.name], pkgs[:1])
+        assert len(added) == 1
+        assert not failed
+        assert not errors
+        added, failed, errors = aptly.put([repo.name], pkgs[1:])
+        assert not added
+        assert len(failed) == 1
+        assert not errors
+
+    def test_put_force_replace(self, aptly: aptly_ctl.aptly.Aptly, packages_conflict):
+        pkgs = [pkg.file.origpath for pkg in packages_conflict]
+        repo = aptly.repo_create(rand("repo"))
+        added, failed, errors = aptly.put([repo.name], pkgs[:1])
+        assert len(added) == 1
+        assert not failed
+        assert not errors
+        added, failed, errors = aptly.put([repo.name], pkgs[1:], force_replace=True)
+        assert len(added) == 1
+        assert not failed
+        assert not errors
 
     def test_repo_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))

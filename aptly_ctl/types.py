@@ -4,16 +4,57 @@ from collections import OrderedDict
 import typing
 import hashlib
 import os.path
+import datetime
+import tarfile
+import unix_ar
 import fnvhash
 import aptly_api
 from aptly_ctl.util import DebianVersion as Version
-import datetime
-import aptly_ctl.exceptions
 
 
 logger = logging.getLogger(__name__)
 KEY_REGEXP = re.compile(r"(\w*?)P(\w+) (\S+) (\S+) (\w+)$")
 DIR_REF_REGEXP = re.compile(r"(\S+?)_(\S+?)_(\w+)")
+
+
+def read_control_file_lines(package_path: str) -> str:
+    """Yields lines of control file from debian package"""
+    with open(package_path, "rb") as package_file:
+        ar_archive = unix_ar.open(package_file)
+        for ar_member_info in ar_archive.infolist():
+            ar_member_filename = ar_member_info.name.decode("utf-8", errors="replace")
+            if ar_member_filename.startswith("control.tar"):
+                break
+        else:
+            raise ValueError("Failed to find control archive inside debian package")
+        with ar_archive.open(ar_member_filename) as ar_member_file:
+            with tarfile.open(fileobj=ar_member_file) as tar_file:
+                with tar_file.extractfile("./control") as control_file:
+                    for line in control_file:
+                        yield line.decode("utf-8", errors="replace").rstrip()
+
+
+def get_control_file_fields(package_file: str) -> typing.Dict[str, str]:
+    """Returns dictionay of control file fields from debian package"""
+    fields = {}  # type: typing.Dict[str, str]
+    last_field = ""
+    line_num = 0
+    for line in read_control_file_lines(package_file):
+        if not line:
+            if len(fields) == 0:
+                continue
+            break
+        if line[0].isspace():
+            fields[last_field] += line + "\n"
+        else:
+            last_field, _, value = line.partition(":")
+            if not last_field or not value.strip():
+                raise ValueError(
+                    "Malformed control file: {}: {}".format(line_num, line)
+                )
+            fields[last_field] = value.strip()
+        line_num += 1
+    return fields
 
 
 class PackageFileInfo(typing.NamedTuple):
@@ -88,6 +129,10 @@ class Package(typing.NamedTuple):
                 size += len(chunk)
                 for _hash in hashes:
                     _hash.update(chunk)
+        fields = get_control_file_fields(filepath)
+        name = fields["Package"]
+        version = Version(fields["Version"])
+        arch = fields["Architecture"]
         fileinfo = PackageFileInfo(
             md5=hashes[0].hexdigest(),
             sha1=hashes[1].hexdigest(),
@@ -107,15 +152,6 @@ class Package(typing.NamedTuple):
             ]
         )
         files_hash = "{:x}".format(fnvhash.fnv1a_64(data))
-        # Trying to guess future aptly key
-        # FIXME get info from package itself and not it's filename
-        parsed_dir_ref = DIR_REF_REGEXP.match(fileinfo.filename)
-        if not parsed_dir_ref:
-            raise aptly_ctl.exceptions.AptlyCtlError(
-                "Failed to guess aptly key for filename " + fileinfo.filename
-            )
-        name, _, arch = parsed_dir_ref.groups()
-        version = Version(parsed_dir_ref.group(2))
         return cls(
             name=name,
             version=version,
