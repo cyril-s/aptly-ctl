@@ -152,8 +152,20 @@ class TestAptly:
         snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         aptly.repo_delete(repo.name, force=True)
 
-    # def test_snapshot_delete_without_force_error(self, aptly):
-    # def test_snapshot_delete_force(self, aptly):
+    def test_snapshot_delete_without_force_error(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        snap1 = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
+        snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
+        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
+            aptly.snapshot_delete(snap1.name)
+
+    def test_snapshot_delete_force(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        snap1 = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
+        snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
+        aptly.snapshot_delete(snap1.name, force=True)
+        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
+            aptly.snapshot_show(snap1.name)
 
     def test_put(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repos = set()
