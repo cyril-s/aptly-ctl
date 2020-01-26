@@ -2,7 +2,7 @@ import pytest
 import random
 from datetime import datetime
 import aptly_ctl.aptly
-from aptly_ctl.types import Repo, Package, Snapshot
+from aptly_ctl.debian import Repo, Package, Snapshot
 import aptly_ctl.exceptions
 
 

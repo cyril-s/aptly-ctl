@@ -11,7 +11,13 @@ from aptly_ctl.exceptions import (
     InvalidOperationError,
     SnapshotNotFoundError,
 )
-from aptly_ctl.types import Package, Repo, Snapshot, PackageContainer, PackageContainers
+from aptly_ctl.debian import (
+    Package,
+    Repo,
+    Snapshot,
+    PackageContainer,
+    PackageContainers,
+)
 
 logger = logging.getLogger(__name__)
 
