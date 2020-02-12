@@ -7,29 +7,39 @@ from aptly_ctl.utils import PackageRef, PackageFile
 
 logger = logging.getLogger(__name__)
 
+
 def config_subparser(subparsers_action_object):
-    parser_put = subparsers_action_object.add_parser("put",
-            help="put packages in local repos",
-            description="""
+    parser_put = subparsers_action_object.add_parser(
+        "put",
+        help="put packages in local repos",
+        description="""
             Put packages in local repos and update dependent publishes.
             STDOUT is a list of newly uploaded package_references
-            """)
+            """,
+    )
 
     parser_put.set_defaults(func=put)
-    parser_put.add_argument("repo",
-        help="destination repository name")
+    parser_put.add_argument("repo", help="destination repository name")
 
-    parser_put.add_argument("packages", metavar="package", nargs="*",
-        help="pakcages to upload. If omitted, file paths are read from STDIN")
+    parser_put.add_argument(
+        "packages",
+        metavar="package",
+        nargs="*",
+        help="pakcages to upload. If omitted, file paths are read from STDIN",
+    )
 
-    parser_put.add_argument("-f", "--force-replace", action="store_true",
-        help="remove packages conflicting with package being added")
+    parser_put.add_argument(
+        "-f",
+        "--force-replace",
+        action="store_true",
+        help="remove packages conflicting with package being added",
+    )
 
 
 def put(config, args):
     timestamp = datetime.utcnow().timestamp()
     directory = "{}_{:.0f}".format(args.repo, timestamp)
-    aptly = ExtendedAptlyClient(config.url)
+    aptly = ExtendedAptlyClient(config.url, timeout=args.timeout)
 
     # don't try to upload files if repos does not exist
     try:
@@ -59,8 +69,9 @@ def put(config, args):
         logger.debug("Upload result: %s" % ",".join(upload_result))
 
     try:
-        add_result = aptly.repos.add_uploaded_file(args.repo, directory,
-                force_replace=args.force_replace)
+        add_result = aptly.repos.add_uploaded_file(
+            args.repo, directory, force_replace=args.force_replace
+        )
     finally:
         logger.info("Deleting directory '%s'." % directory)
         aptly.files.delete(path=directory)
@@ -79,15 +90,23 @@ def put(config, args):
         # renamed deb packages won't be displayed
         dir_ref = f.split()[0]
         filename = dir_ref + ".deb"
-        orig_file = [ p for p in packages if p.filename == filename ]
+        orig_file = [p for p in packages if p.filename == filename]
         if len(orig_file) == 0:
             # probably original deb file was renamed
-            logger.warning('For added package "{}" there were no match in original deb files'.format(dir_ref))
+            logger.warning(
+                'For added package "{}" there were no match in original deb files'.format(
+                    dir_ref
+                )
+            )
         else:
             if len(orig_file) > 1:
-                logger.warning('For added package "{}" there were more than one match in original deb files: {}'.format(dir_ref, orig_file))
+                logger.warning(
+                    'For added package "{}" there were more than one match in original deb files: {}'.format(
+                        dir_ref, orig_file
+                    )
+                )
             added_ref = PackageRef(args.repo + "/" + dir_ref)
-            added_ref.hash = format(orig_file[0].ahash, 'x')
+            added_ref.hash = format(orig_file[0].ahash, "x")
             print('"{!r}"'.format(added_ref))
 
     if len(add_result.report["Added"]) + len(add_result.report["Removed"]) == 0:
