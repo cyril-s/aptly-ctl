@@ -11,3 +11,4 @@ sdist/
 .pytest_cache
 *.swp
 .tox/
+.mypy_cache

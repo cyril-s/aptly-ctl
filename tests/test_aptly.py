@@ -1,37 +1,32 @@
-import pytest
+import pytest  # type: ignore
 import random
-from datetime import datetime
+from typing import Iterator
 import aptly_ctl.aptly
-from aptly_ctl.debian import Repo, Package, Snapshot
+from aptly_ctl.aptly import Repo, Snapshot, Publish, Source
 import aptly_ctl.exceptions
 
 
-def rand(prefix=""):
+def rand(prefix: str = "") -> str:
     return "{}{}".format(prefix, random.randrange(100000))
 
 
 class TestAptly:
     @pytest.fixture
-    def aptly(self):
+    def aptly(self) -> Iterator[aptly_ctl.aptly.Aptly]:
         url = "http://localhost:8090/"
-        aptly = aptly_ctl.aptly.Aptly(url)
+        sig_cfg = aptly_ctl.aptly.SigningConfig(
+            skip=False,
+            gpgkey="DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0",
+            passphrase_file="/home/aptly/gpg_pass",
+        )
+        aptly = aptly_ctl.aptly.Aptly(url, default_signing_config=sig_cfg)
         yield aptly
-        try:
-            for repo in aptly.repo_list():
-                try:
-                    aptly.repo_delete(repo.name, force=True)
-                except Exception as e:
-                    print("Failed to cleanup repos: {}".format(e))
-        except Exception as e:
-            print("Failed to cleanup repos: {}".format(e))
-        try:
-            for snapshot in aptly.snapshot_list():
-                try:
-                    aptly.snapshot_delete(snapshot.name, force=True)
-                except Exception as e:
-                    print("Failed to cleanup snapshots: {}".format(e))
-        except Exception as e:
-            print("Failed to cleanup snapshots: {}".format(e))
+        for publish in aptly.publish_list():
+            aptly.publish_drop(publish, force=True)
+        for repo in aptly.repo_list():
+            aptly.repo_delete(repo.name, force=True)
+        for snapshot in aptly.snapshot_list():
+            aptly.snapshot_delete(snapshot.name, force=True)
 
     def test_repo_show_no_repo_error(self, aptly: aptly_ctl.aptly.Aptly):
         with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
@@ -124,7 +119,7 @@ class TestAptly:
     def test_snapshot_edit_same_snapshot_name_error(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("repo"))
         snap1_name = rand("snap1")
-        snap1 = aptly.snapshot_create_from_repo(repo.name, snap1_name)
+        _ = aptly.snapshot_create_from_repo(repo.name, snap1_name)
         snap2 = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
             aptly.snapshot_edit(snap2.name, new_name=snap1_name)
@@ -143,29 +138,29 @@ class TestAptly:
 
     def test_repo_delete_without_force_error(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("repo"))
-        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
+        _ = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
             aptly.repo_delete(repo.name)
 
     def test_repo_delete_force(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("repo"))
-        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
+        _ = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         aptly.repo_delete(repo.name, force=True)
 
     def test_snapshot_delete_without_force_error(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
-        snap1 = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
-        snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
+        _ = aptly.snapshot_create_from_snapshots(rand("snap"), [snap])
         with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.snapshot_delete(snap1.name)
+            aptly.snapshot_delete(snap.name)
 
     def test_snapshot_delete_force(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("test"))
-        snap1 = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
-        snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
-        aptly.snapshot_delete(snap1.name, force=True)
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
+        _ = aptly.snapshot_create_from_snapshots(rand("snap"), [snap])
+        aptly.snapshot_delete(snap.name, force=True)
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly.snapshot_show(snap1.name)
+            aptly.snapshot_show(snap.name)
 
     def test_put(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repos = set()
@@ -328,3 +323,189 @@ class TestAptly:
         snap = aptly.snapshot_create_from_packages(rand("snap"), packages_simple)
         search_result = aptly._search(snap)
         assert search_result.packages == expected_pkgs
+
+    def test_publish_create_from_local_repo(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo, "main")]
+        pub_to_create = Publish.new(
+            sources, distribution="stretch", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+        assert pub.full_prefix == "."
+        assert pub.source_kind == "local"
+        assert pub.sources == frozenset(sources)
+        assert pub.distribution == "stretch"
+
+    def test_publish_create_from_snapshot(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
+        sources = [Source(snap._replace(description="", created_at=None), "main")]
+        pub_to_create = Publish.new(
+            sources, distribution="stretch", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+        assert pub.full_prefix == "."
+        assert pub.source_kind == "snapshot"
+        assert pub.sources == frozenset(sources)
+        assert pub.distribution == "stretch"
+
+    def test_publish_create_with_prefix(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo, "main")]
+        pub_to_create = Publish.new(
+            sources, prefix="debian", distribution="stretch", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+        assert pub.full_prefix == "debian"
+        assert pub.source_kind == "local"
+        assert pub.sources == frozenset(sources)
+        assert pub.distribution == "stretch"
+
+    def test_publish_list(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo, "main")]
+        pub_to_create = Publish.new(
+            sources, distribution="stretch", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+        pub_list = aptly.publish_list()
+        assert len(pub_list) == 1
+        assert pub_list[0] == pub
+
+    def test_publish_drop(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo, "main")]
+        pub_to_create = Publish.new(
+            sources, distribution="stretch", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+        aptly.publish_drop(pub)
+        pub_list = aptly.publish_list()
+        assert len(pub_list) == 0
+
+    def test_publish_drop_str_args(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo, "main")]
+        pub_to_create = Publish.new(
+            sources, distribution="stretch", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+        aptly.publish_drop(
+            storage=pub.storage, prefix=pub.prefix, distribution=pub.distribution
+        )
+        pub_list = aptly.publish_list()
+        assert len(pub_list) == 0
+
+    def test_publish_update_from_local_repo(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo, "main")]
+        pub_to_create = Publish.new(
+            sources, distribution="buster", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+        updated_pub = aptly.publish_update(pub)
+        assert updated_pub.prefix == "."
+        assert updated_pub.source_kind == "local"
+        assert updated_pub.sources == frozenset(sources)
+
+    def test_publish_update_switch_snapshot(self, aptly: aptly_ctl.aptly.Aptly):
+        repo = aptly.repo_create(rand("test"))
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap1_"))
+        sources = [Source(snap, "main")]
+        pub_to_create = Publish.new(
+            sources, distribution="buster", architectures=["amd64"]
+        )
+        pub = aptly.publish_create(pub_to_create)
+
+        snap_new = aptly.snapshot_create_from_repo(repo.name, rand("snap2_"))
+        sources_new = frozenset(
+            [Source(snap_new._replace(description="", created_at=None), "main")]
+        )
+        pub_new = pub._replace(sources=sources_new)
+        updated_pub = aptly.publish_update(pub_new)
+        assert updated_pub.prefix == "."
+        assert updated_pub.source_kind == "snapshot"
+        assert updated_pub.sources == sources_new
+
+
+class TestPublish:
+    def test_new(self):
+        sources_repos = [Source(Repo("repo1"), "comp1"), Source(Repo("repo2"), "comp2")]
+        sources_snaps = [
+            Source(Snapshot("snap1"), "comp1"),
+            Source(Snapshot("snap1"), "comp2"),
+        ]
+        p_repos = Publish.new(sources_repos)
+        p_snaps = Publish.new(sources_snaps)
+        assert p_repos.source_kind == "local"
+        assert p_snaps.source_kind == "snapshot"
+        assert p_repos.sources == frozenset(sources_repos)
+        assert p_snaps.sources == frozenset(sources_snaps)
+        for p in [p_repos, p_snaps]:
+            assert p.storage is ""
+            assert p.prefix is ""
+            assert p.distribution is ""
+            assert p.full_prefix == "."
+            assert p.full_prefix_escaped == ":."
+
+    def test_new_prefix(self):
+        sources = [Source(Repo("repo1"))]
+        for storage, prefix, full, escaped in [
+            (None, None, ".", ":."),
+            (None, "debian", "debian", "debian"),
+            ("s3", "debian", "s3:debian", "s3:debian"),
+            ("s3", "pkg/debian_new", "s3:pkg/debian_new", "s3:pkg_debian__new"),
+        ]:
+            p = Publish.new(sources, storage=storage, prefix=prefix)
+            assert p.full_prefix == full
+            assert p.full_prefix_escaped == escaped
+
+    def test_new_mixed_sources_error(self):
+        sources = [Source(Repo("repo"), "comp1"), Source(Snapshot("snap"), "comp2")]
+        with pytest.raises(ValueError):
+            Publish.new(sources)
+
+    def test_new_invalid_source_error(self):
+        sources = [Source("repo", "comp1")]
+        with pytest.raises(ValueError):
+            Publish.new(sources)
+
+    def test_new_empty_sources_error(self):
+        with pytest.raises(ValueError):
+            Publish.new([])
+
+    def test_new_invalid_prefix_error(self):
+        sources = [Source(Repo("repo1"))]
+        with pytest.raises(ValueError):
+            Publish.new(sources, prefix="s3:debian")
+
+    def test_api_params(self):
+        repo = Repo("repo1")
+        sources = [Source(repo, "main")]
+        p = Publish.new(
+            sources,
+            storage="s3",
+            prefix="debian",
+            distribution="buster",
+            architectures=["amd64"],
+            label="label",
+            origin="origin",
+            not_automatic="yes",
+            but_automatic_upgrades=True,
+            acquire_by_hash=True,
+        )
+        params = p.api_params
+        assert params == {
+            "SourceKind": "local",
+            "Sources": [{"Name": repo.name, "Component": "main"}],
+            "Distribution": "buster",
+            "Architectures": ["amd64"],
+            "Label": "label",
+            "Origin": "origin",
+            "NotAutomatic": "yes",
+            "ButAutomaticUpgrades": "yes",
+            "AcquireByHash": True,
+        }
+
+    def test_from_api_response(self):
+        pass

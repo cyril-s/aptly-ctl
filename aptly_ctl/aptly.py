@@ -1,33 +1,443 @@
 import logging
+import re
 import os
+import urllib3  # type: ignore
+import json
+from collections import OrderedDict
+import hashlib
+import fnvhash  # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from itertools import product
-from typing import Tuple, Iterable, List, Optional, Dict, Sequence, Union
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    FrozenSet,
+    TypeVar,
+    cast,
+)
+import aptly_api  # type: ignore
 from aptly_api import Client, AptlyAPIException
 from aptly_ctl.exceptions import (
     AptlyCtlError,
     RepoNotFoundError,
     InvalidOperationError,
     SnapshotNotFoundError,
-)
-from aptly_ctl.debian import (
-    Package,
-    Repo,
-    Snapshot,
-    PackageContainer,
-    PackageContainers,
+    AptlyApiError,
 )
 
+from aptly_ctl.debian import Version, get_control_file_fields
+from aptly_ctl.util import urljoin, timedelta_pretty
+
 logger = logging.getLogger(__name__)
+
+KEY_REGEXP = re.compile(r"(\w*?)P(\w+) (\S+) (\S+) (\w+)$")
+DIR_REF_REGEXP = re.compile(r"(\S+?)_(\S+?)_(\w+)")
+
+
+class SigningConfig(NamedTuple):
+    skip: bool = False
+    batch: bool = True
+    gpgkey: Optional[str] = None
+    keyring: Optional[str] = None
+    secret_keyring: Optional[str] = None
+    passphrase: Optional[str] = None
+    passphrase_file: Optional[str] = None
+
+    @property
+    def kwargs(self) -> Dict[str, Union[str, bool]]:
+        if self.skip:
+            return {"Skip": True}
+        kwargs = {"Batch": self.batch}  # type: Dict[str, Union[str, bool]]
+        if self.gpgkey:
+            kwargs["GpgKey"] = self.gpgkey
+        if self.keyring:
+            kwargs["Keyring"] = self.keyring
+        if self.secret_keyring:
+            kwargs["SecretKeyring"] = self.secret_keyring
+        if self.passphrase:
+            kwargs["Passphrase"] = self.passphrase
+        if self.passphrase_file:
+            kwargs["PassphraseFile"] = self.passphrase_file
+        return kwargs
+
+
+DefaultSigningConfig = SigningConfig()
+
+
+class PackageFileInfo(NamedTuple):
+    filename: str
+    path: str
+    origpath: str
+    size: int
+    md5: str
+    sha1: str
+    sha256: str
+
+
+class Package(NamedTuple):
+    """Represents package in aptly or on local filesystem"""
+
+    name: str
+    version: Version
+    arch: str
+    prefix: str
+    files_hash: str
+    fields: Optional[Dict[str, str]] = None
+    file: Optional[PackageFileInfo] = None
+
+    @property
+    def key(self) -> str:
+        """Returns aptly key"""
+        return "{o.prefix}P{o.arch} {o.name} {o.version} {o.files_hash}".format(o=self)
+
+    @property
+    def dir_ref(self) -> str:
+        """Returns aptly dir ref"""
+        return "{o.name}_{o.version}_{o.arch}".format(o=self)
+
+    @classmethod
+    def from_aptly_api(cls, package: aptly_api.Package) -> "Package":
+        """Create from instance of aptly_api.Package"""
+        parsed_key = KEY_REGEXP.match(package.key)
+        if parsed_key is None:
+            raise ValueError("Invalid package: {}".format(package))
+        prefix, arch, name, _, files_hash = parsed_key.groups()
+        version = Version(parsed_key.group(4))
+        fields = None
+        if package.fields:
+            fields = OrderedDict(sorted(package.fields.items()))
+        return cls(
+            name=name,
+            version=version,
+            arch=arch,
+            prefix=prefix,
+            files_hash=files_hash,
+            fields=fields,
+        )
+
+    @classmethod
+    def from_key(cls, key: str) -> "Package":
+        """Create from instance of aptly key"""
+        return cls.from_aptly_api(aptly_api.Package(key, None, None, None))
+
+    @classmethod
+    def from_file(cls, filepath: str) -> "Package":
+        """
+        Build representation of aptly package from package on local filesystem
+        """
+        hashes = [hashlib.md5(), hashlib.sha1(), hashlib.sha256()]
+        size = 0
+        buff_size = 1024 * 1024
+        with open(filepath, "rb", buff_size) as file:
+            while True:
+                chunk = file.read(buff_size)
+                if not chunk:
+                    break
+                size += len(chunk)
+                for _hash in hashes:
+                    _hash.update(chunk)
+        fields = get_control_file_fields(filepath)
+        name = fields["Package"]
+        version = Version(fields["Version"])
+        arch = fields["Architecture"]
+        fileinfo = PackageFileInfo(
+            md5=hashes[0].hexdigest(),
+            sha1=hashes[1].hexdigest(),
+            sha256=hashes[2].hexdigest(),
+            size=size,
+            filename=os.path.basename(os.path.realpath(filepath)),
+            path=os.path.realpath(os.path.abspath(filepath)),
+            origpath=filepath,
+        )
+        data = b"".join(
+            [
+                bytes(fileinfo.filename, "ascii"),
+                fileinfo.size.to_bytes(8, "big"),
+                bytes(fileinfo.md5, "ascii"),
+                bytes(fileinfo.sha1, "ascii"),
+                bytes(fileinfo.sha256, "ascii"),
+            ]
+        )
+        files_hash = "{:x}".format(fnvhash.fnv1a_64(data))
+        return cls(
+            name=name,
+            version=version,
+            arch=arch,
+            prefix="",
+            files_hash=files_hash,
+            fields=None,
+            file=fileinfo,
+        )
+
+
+class Repo(NamedTuple):
+    """Represents local repo in aptly"""
+
+    name: str
+    comment: Optional[str] = None
+    default_distribution: Optional[str] = None
+    default_component: Optional[str] = None
+    packages: FrozenSet[Package] = frozenset()
+
+    @classmethod
+    def from_aptly_api(
+        cls, repo: aptly_api.Repo, packages: FrozenSet[Package] = frozenset()
+    ) -> "Repo":
+        """Create from instance of aply_api.Repo"""
+        return cls(
+            name=repo.name,
+            comment=repo.comment if repo.comment else None,
+            default_distribution=repo.default_distribution
+            if repo.default_distribution
+            else None,
+            default_component=repo.default_component
+            if repo.default_component
+            else None,
+            packages=packages,
+        )
+
+
+class Snapshot(NamedTuple):
+    """Represents snapshot in aptly"""
+
+    name: str
+    description: str = ""
+    created_at: Optional[datetime] = None
+    packages: FrozenSet[Package] = frozenset()
+
+    @classmethod
+    def from_aptly_api(
+        cls, snapshot: aptly_api.Snapshot, packages: FrozenSet[Package] = frozenset(),
+    ) -> "Snapshot":
+        """Create from instance of aply_api.Snapshot"""
+        return cls(
+            name=snapshot.name,
+            description=snapshot.description,
+            created_at=snapshot.created_at,
+            packages=packages,
+        )
+
+
+PackageContainer = TypeVar("PackageContainer", Repo, Snapshot)
+PackageContainers = Union[Repo, Snapshot]
+
+
+class Source(NamedTuple):
+    """Represents source from which publishes are created"""
+
+    container: PackageContainers
+    component: Optional[str] = None
+
+
+class Publish(NamedTuple):
+    """Represents publish in aptly"""
+
+    source_kind: str
+    sources: FrozenSet[Source]
+    storage: str = ""
+    prefix: str = ""
+    distribution: str = ""
+    architectures: Sequence[str] = ()
+    label: str = ""
+    origin: str = ""
+    not_automatic: bool = False
+    but_automatic_upgrades: bool = False
+    acquire_by_hash: bool = False
+
+    @classmethod
+    def new(
+        cls,
+        sources: Sequence[Source],
+        storage: str = "",
+        prefix: str = "",
+        distribution: str = "",
+        architectures: Sequence[str] = (),
+        label: str = "",
+        origin: str = "",
+        not_automatic: bool = False,
+        but_automatic_upgrades: bool = False,
+        acquire_by_hash: bool = False,
+    ) -> "Publish":
+        """
+        Constructor of Publish that checks input arguments, sets source_kind automatically
+        and converts sources to frozenset if necessary.
+        This is a prefered way to create Publish instances.
+        """
+        if not sources:
+            raise ValueError("Cannot publish from empty list of sources")
+
+        source_kind = ""
+        for source in sources:
+            if isinstance(source.container, Repo):
+                if source_kind == "":
+                    source_kind = "local"
+                elif source_kind != "local":
+                    raise ValueError(
+                        "Unexpected Repo instance '{}' for source_kind='{}'".format(
+                            source.container, source_kind
+                        )
+                    )
+            elif isinstance(source.container, Snapshot):
+                if source_kind == "":
+                    source_kind = "snapshot"
+                elif source_kind != "snapshot":
+                    raise ValueError(
+                        "Unexpected Snapshot instance '{}' for source_kind='{}'".format(
+                            source.container, source_kind
+                        )
+                    )
+            else:
+                raise ValueError(
+                    "Unexpected source '{}' of type '{}'".format(
+                        source.container, type(source.container)
+                    )
+                )
+
+        sources_set = frozenset(sources)
+
+        if prefix and not storage and ":" in prefix:
+            raise ValueError(
+                "Publish prefix must not contain ':' when storage is not supplied"
+            )
+
+        return cls(
+            source_kind=source_kind,
+            sources=sources_set,
+            storage=storage,
+            prefix=prefix,
+            distribution=distribution,
+            architectures=architectures,
+            label=label,
+            origin=origin,
+            not_automatic=not_automatic,
+            but_automatic_upgrades=but_automatic_upgrades,
+            acquire_by_hash=acquire_by_hash,
+        )
+
+    @classmethod
+    def from_api_response(cls, resp: Dict[str, Any]) -> "Publish":
+        """Create publish instance from API json response"""
+        kwargs = {"source_kind": resp["SourceKind"]}
+        sources = []
+        for source in resp["Sources"]:
+            if kwargs["source_kind"] == "local":
+                sources.append(Source(Repo(name=source["Name"]), source["Component"]))
+            else:
+                sources.append(
+                    Source(Snapshot(name=source["Name"]), source["Component"])
+                )
+        kwargs["sources"] = frozenset(sources)
+        for key, tgt_key in [
+            ("Storage", "storage"),
+            ("Prefix", "prefix"),
+            ("Distribution", "distribution"),
+            ("Architectures", "architectures"),
+            ("Label", "label"),
+            ("Origin", "origin"),
+            ("NotAutomatic", "not_automatic"),
+            ("ButAutomaticUpgrades", "but_automatic_upgrades"),
+            ("AcquireByHash", "acquire_by_hash"),
+        ]:
+            if key in resp:
+                kwargs[tgt_key] = resp[key]
+
+        return cls(**kwargs)
+
+    @property
+    def sources_dict(self) -> List[Dict[str, str]]:
+        sources = []
+        for source in self.sources:
+            s = {"Name": source.container.name}  # type: Dict[str, str]
+            if source.component:
+                s["Component"] = source.component
+            sources.append(s)
+        return sources
+
+    @property
+    def api_params(self) -> Dict[str, Any]:
+        params = {
+            "SourceKind": self.source_kind,
+            "Sources": self.sources_dict,
+        }  # type: Dict[str, Any]
+        if self.distribution:
+            params["Distribution"] = self.distribution
+        if self.architectures:
+            params["Architectures"] = self.architectures
+        if self.label:
+            params["Label"] = self.label
+        if self.origin:
+            params["Origin"] = self.origin
+        if self.not_automatic is True:
+            params["NotAutomatic"] = "yes"
+        elif self.not_automatic:
+            params["NotAutomatic"] = self.not_automatic
+        if self.but_automatic_upgrades is True:
+            params["ButAutomaticUpgrades"] = "yes"
+        elif self.but_automatic_upgrades:
+            params["ButAutomaticUpgrades"] = self.but_automatic_upgrades
+        if self.acquire_by_hash:
+            params["AcquireByHash"] = self.acquire_by_hash
+
+        return params
+
+    @property
+    def full_prefix(self) -> str:
+        prefix = self.prefix if self.prefix else "."
+        if not self.storage:
+            return prefix
+        return self.storage + ":" + prefix
+
+    @property
+    def full_prefix_escaped(self) -> str:
+        prefix = self.full_prefix
+        if prefix == ".":
+            return ":."
+        prefix = prefix.replace("_", "__")
+        prefix = prefix.replace("/", "_")
+        return prefix
 
 
 class Aptly:
     """Aptly API client with more convenient commands"""
 
-    def __init__(self, url: str, max_workers: int = 10) -> None:
+    publish_url_path: ClassVar[str] = "api/publish"
+
+    def __init__(
+        self,
+        url: str,
+        max_workers: int = 10,
+        default_signing_config: SigningConfig = DefaultSigningConfig,
+        signing_config_map: Dict[str, SigningConfig] = None,
+    ) -> None:
+        self.http = urllib3.PoolManager()
+        self.url = url
         self.aptly = Client(url)
         self.max_workers = max_workers
+        self.default_signing_config = default_signing_config
+        if signing_config_map:
+            self.signing_config_map = signing_config_map
+        else:
+            self.signing_config_map = {}
+
+    def get_signing_config(
+        self, prefix: Optional[str], distribution: Optional[str]
+    ) -> SigningConfig:
+        if prefix is None:
+            prefix = "."
+        if distribution is None:
+            distribution = ""
+        return self.signing_config_map.get(
+            prefix + "/" + distribution, self.default_signing_config
+        )
 
     def repo_show(self, name: str) -> Repo:
         """
@@ -515,3 +925,104 @@ class Aptly:
                 else:
                     raise
         return fails
+
+    def _request(
+        self,
+        method: str,
+        url: str,
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = None,
+    ) -> Tuple[Union[Dict[str, Any], List[Dict[str, Any]]], int]:
+        encoded_data = json.dumps(data).encode("utf-8") if data else None
+        start = datetime.now()
+        logger.debug("sending  %s %s data: %s", method, url, encoded_data)
+        resp = self.http.request(
+            method, url, body=encoded_data, headers={"Content-Type": "application/json"}
+        )
+        logger.debug(
+            "response on %s %s took %s returned %s: %s",
+            method,
+            url,
+            timedelta_pretty(datetime.now() - start),
+            resp.status,
+            resp.data,
+        )
+        if resp.status < 200 or resp.status >= 300:
+            raise AptlyApiError(resp.status, resp.data)
+        resp_data = json.loads(resp.data.decode("utf-8"))
+        return resp_data, resp.status
+
+    def publish_create(
+        self,
+        publish: Publish,
+        force_overwrite: bool = False,
+        skip_cleanup: bool = False,
+    ) -> Publish:
+        body = publish.api_params
+        body["Signing"] = self.get_signing_config(
+            publish.full_prefix, publish.distribution
+        ).kwargs
+
+        url = urljoin(self.url, self.publish_url_path)
+        if publish.full_prefix != ".":
+            url = urljoin(url, publish.full_prefix_escaped)
+
+        if force_overwrite:
+            body["ForceOverwrite"] = force_overwrite
+        if skip_cleanup:
+            body["SkipCleanup"] = skip_cleanup
+
+        pub_data, _ = self._request("POST", url, body)
+        pub_data = cast(Dict[str, Any], pub_data)
+        return Publish.from_api_response(pub_data)
+
+    def publish_list(self) -> Sequence[Publish]:
+        url = urljoin(self.url, self.publish_url_path)
+        pub_list, _ = self._request("GET", url)
+        pub_list = cast(List[Dict[str, Any]], pub_list)
+        return [Publish.from_api_response(p) for p in pub_list]
+
+    def publish_drop(
+        self,
+        publish: Publish = None,
+        storage: str = "",
+        prefix: str = "",
+        distribution: str = "",
+        force: bool = False,
+    ) -> None:
+        if publish:
+            pub = publish
+        else:
+            pub = Publish.new(
+                [Source(Repo("test"))],
+                storage=storage,
+                prefix=prefix,
+                distribution=distribution,
+            )
+        url = urljoin(
+            self.url, self.publish_url_path, pub.full_prefix_escaped, pub.distribution
+        )
+        _, _ = self._request("DELETE", url)
+
+    def publish_update(
+        self, publish: Publish, force_overwrite: bool = False
+    ) -> Publish:
+        body = {}  # type: Dict[str, Any]
+        body["Signing"] = self.get_signing_config(
+            publish.full_prefix, publish.distribution
+        ).kwargs
+        if publish.acquire_by_hash:
+            body["AcquireByHash"] = publish.acquire_by_hash
+        if force_overwrite:
+            body["ForceOverwrite"] = force_overwrite
+        if publish.source_kind == "snapshot":
+            body["Snapshots"] = publish.sources_dict
+
+        url = urljoin(
+            self.url,
+            self.publish_url_path,
+            publish.full_prefix_escaped,
+            publish.distribution,
+        )
+        pub_data, _ = self._request("PUT", url, body)
+        pub_data = cast(Dict[str, Any], pub_data)
+        return Publish.from_api_response(pub_data)

@@ -1,41 +1,36 @@
-import pytest
-from aptly_ctl.util import rotate
-import aptly_api
-from aptly_ctl.debian import Package, Version
-
-
-def pkg(*args):
-    return Package.from_aptly_api(aptly_api.Package(*args))
+from datetime import timedelta
+from aptly_ctl.util import rotate, urljoin, timedelta_pretty
+from aptly_ctl.aptly import Package
 
 
 def test_rotate():
     inp1 = [
-        pkg("Pamd64 python 3.6.6 3660000000000000", None, None, None),
-        pkg("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-        pkg("Pamd64 aptly 1.5.0 1500000000000000", None, None, None),
-        pkg("Pamd64 aptly 1.3.0 1300000000000000", None, None, None),
-        pkg("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-        pkg("Pamd64 aptly 1.4.0 1400000000000000", None, None, None),
-        pkg("Pamd64 aptly 1.6.0 1500000000000000", None, None, None),
+        Package.from_key("Pamd64 python 3.6.6 3660000000000000"),
+        Package.from_key("Pamd64 python 3.6.5 3650000000000000"),
+        Package.from_key("Pamd64 aptly 1.5.0 1500000000000000"),
+        Package.from_key("Pamd64 aptly 1.3.0 1300000000000000"),
+        Package.from_key("Pamd64 aptly 1.2.0 1200000000000000"),
+        Package.from_key("Pamd64 aptly 1.4.0 1400000000000000"),
+        Package.from_key("Pamd64 aptly 1.6.0 1500000000000000"),
     ]
     for inp, n, exp in [
         (
             inp1,
             2,
             [
-                pkg("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("Pamd64 aptly 1.3.0 1300000000000000", None, None, None),
-                pkg("Pamd64 aptly 1.4.0 1400000000000000", None, None, None),
+                Package.from_key("Pamd64 aptly 1.2.0 1200000000000000"),
+                Package.from_key("Pamd64 aptly 1.3.0 1300000000000000"),
+                Package.from_key("Pamd64 aptly 1.4.0 1400000000000000"),
             ],
         ),
         (
             inp1,
             -2,
             [
-                pkg("Pamd64 aptly 1.5.0 1500000000000000", None, None, None),
-                pkg("Pamd64 aptly 1.6.0 1500000000000000", None, None, None),
-                pkg("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-                pkg("Pamd64 python 3.6.6 3660000000000000", None, None, None),
+                Package.from_key("Pamd64 aptly 1.5.0 1500000000000000"),
+                Package.from_key("Pamd64 aptly 1.6.0 1500000000000000"),
+                Package.from_key("Pamd64 python 3.6.5 3650000000000000"),
+                Package.from_key("Pamd64 python 3.6.6 3660000000000000"),
             ],
         ),
         (inp1, 0, inp1,),
@@ -43,40 +38,40 @@ def test_rotate():
         (inp1, -len(inp1), inp1,),
         (
             [
-                pkg("Pamd64 python 3.6.6 3660000000000000", None, None, None),
-                pkg("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-                pkg("Pi386 python 3.6.6 3660000000000000", None, None, None),
-                pkg("Pi386 python 3.6.5 3650000000000000", None, None, None),
-                pkg("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("Pamd64 aptly 1.3.0 1300000000000000", None, None, None),
-                pkg("Pi386 aptly 1.3.0 1300000000000000", None, None, None),
-                pkg("Pi386 aptly 1.2.0 1200000000000000", None, None, None),
+                Package.from_key("Pamd64 python 3.6.6 3660000000000000"),
+                Package.from_key("Pamd64 python 3.6.5 3650000000000000"),
+                Package.from_key("Pi386 python 3.6.6 3660000000000000"),
+                Package.from_key("Pi386 python 3.6.5 3650000000000000"),
+                Package.from_key("Pamd64 aptly 1.2.0 1200000000000000"),
+                Package.from_key("Pamd64 aptly 1.3.0 1300000000000000"),
+                Package.from_key("Pi386 aptly 1.3.0 1300000000000000"),
+                Package.from_key("Pi386 aptly 1.2.0 1200000000000000"),
             ],
             1,
             [
-                pkg("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("Pi386 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-                pkg("Pi386 python 3.6.5 3650000000000000", None, None, None),
+                Package.from_key("Pamd64 aptly 1.2.0 1200000000000000"),
+                Package.from_key("Pi386 aptly 1.2.0 1200000000000000"),
+                Package.from_key("Pamd64 python 3.6.5 3650000000000000"),
+                Package.from_key("Pi386 python 3.6.5 3650000000000000"),
             ],
         ),
         (
             [
-                pkg("Pamd64 python 3.6.6 3660000000000000", None, None, None),
-                pkg("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-                pkg("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("prefPamd64 aptly 1.3.0 1300000000000000", None, None, None),
-                pkg("prefPamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("Pamd64 aptly 1.3.0 1300000000000000", None, None, None),
-                pkg("somePamd64 python 3.6.6 3660000000000000", None, None, None),
-                pkg("somePamd64 python 3.6.5 3650000000000000", None, None, None),
+                Package.from_key("Pamd64 python 3.6.6 3660000000000000"),
+                Package.from_key("Pamd64 python 3.6.5 3650000000000000"),
+                Package.from_key("Pamd64 aptly 1.2.0 1200000000000000"),
+                Package.from_key("prefPamd64 aptly 1.3.0 1300000000000000"),
+                Package.from_key("prefPamd64 aptly 1.2.0 1200000000000000"),
+                Package.from_key("Pamd64 aptly 1.3.0 1300000000000000"),
+                Package.from_key("somePamd64 python 3.6.6 3660000000000000"),
+                Package.from_key("somePamd64 python 3.6.5 3650000000000000"),
             ],
             1,
             [
-                pkg("Pamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("prefPamd64 aptly 1.2.0 1200000000000000", None, None, None),
-                pkg("Pamd64 python 3.6.5 3650000000000000", None, None, None),
-                pkg("somePamd64 python 3.6.5 3650000000000000", None, None, None),
+                Package.from_key("Pamd64 aptly 1.2.0 1200000000000000"),
+                Package.from_key("prefPamd64 aptly 1.2.0 1200000000000000"),
+                Package.from_key("Pamd64 python 3.6.5 3650000000000000"),
+                Package.from_key("somePamd64 python 3.6.5 3650000000000000"),
             ],
         ),
         ([], 2, []),
@@ -89,57 +84,57 @@ def test_rotate():
             assert x in exp
 
 
-class TestVersion:
-    def test_init_err(self):
-        for v in [
-            "1.0-ю3",  # non ascii
-            "-1:1.0",  # negative epoch
-            "1a:1.0",  # non decimal epoch
-            "1:-1",  # empty upstream version
-            "1.1-",  # empty revision
-            ":1.1",  # empty epoch
-            "a1.0-1",  # upstream version starts with non decimal
-        ]:
-            with pytest.raises(ValueError):
-                Version(v)
+def test_urljoin():
+    for inp, expected in [
+        (
+            ["http://localhost:8090/api/publish", "debian"],
+            "http://localhost:8090/api/publish/debian",
+        ),
+        (
+            ["http://localhost:8090/api/publish/", "/debian"],
+            "http://localhost:8090/api/publish/debian",
+        ),
+        (
+            ["http://localhost:8090/api/publish/", "/debian/"],
+            "http://localhost:8090/api/publish/debian/",
+        ),
+        (
+            ["http://localhost:8090/api/publish", ":.", "stretch"],
+            "http://localhost:8090/api/publish/:./stretch",
+        ),
+        (
+            ["http://localhost:8090/api/publish", "s3:.", "stretch"],
+            "http://localhost:8090/api/publish/s3:./stretch",
+        ),
+        (["/api", "publish"], "/api/publish"),
+    ]:
+        assert urljoin(*inp) == expected
 
-    def test_cmp_distinct(self):
-        for left, right in [
-            ("1:1.0", "2:1.0"),  # epoch cmp nonzero
-            ("0:1.0", "1:1.0"),  # epoch cmp zero with nonzero
-            ("1.0", "1:1.0"),  # epoch cmp empty with nonzero
-            ("1.2", "1.10"),  # upsream ver cmp numeric order
-            ("1.2.ananas", "1.2.apple"),  # upsream ver cmp alphabet order
-            ("1.2", "1.2.1"),  # upsream ver cmp empty vs non decimal part
-            ("1.2", "1.2.0"),  # dpkg --compare-versions 1.2 eq 1.2.0 exits with 1
-            ("1.2~1", "1.2"),  # upsream ver cmp tilde erlier then empty
-            ("1.2~1", "1.2-1"),  # upsream ver cmp tilde erlier then anything
-            ("1.1-1", "1.1-2"),  # revision cmp numeric order
-            ("1.2-1a", "1.2-1b"),  # revision cmp alphabet order
-            ("1.2", "1.2-1"),  # revision cmp empty vs something
-            ("1.2-1~a", "1.2-1"),  # revision cmp tilde erlier then empty
-            ("1.2-1~1", "1.2-1a"),  # revision cmp tilde erlier then anything
-        ]:
-            assert Version(left) < Version(right) and Version(right) > Version(left)
-            assert hash(Version(left)) != hash(Version(right))
 
-    def test_cmp_same(self):
-        for left, right in [
-            ("1.0", "0:1.0"),  # epoch cmp empty with_zero
-            ("1.2.", "1.2.0"),  # upsream ver cmp empty vs decimal part
-            ("1.2-bla", "1.2-bla0"),  # revision cmp empty vs decimal part
-            ("1.2", "1.2-0"),  # revision cmp empty vs zero
-        ]:
-            assert Version(left) == Version(right)
-            assert hash(Version(left)) == hash(Version(right))
-
-    def test_str_repr(self):
-        for ver, rep in [
-            ("1.0", "0:1.0-0"),
-            ("0:1.0", "0:1.0-0"),
-            ("1.0-0", "0:1.0-0"),
-            ("0:1.0-0", "0:1.0-0"),
-        ]:
-            v = Version(ver)
-            assert str(v) == ver
-            assert repr(v) == rep
+def test_timedelta_pretty():
+    for inp, expected in [
+        (timedelta(microseconds=0), "0μs"),
+        (timedelta(microseconds=0.1), "0μs"),
+        (timedelta(microseconds=-0.1), "0μs"),
+        (timedelta(microseconds=100), "100μs"),
+        (timedelta(microseconds=-100), "-100μs"),
+        (timedelta(microseconds=1000), "1ms"),
+        (timedelta(microseconds=-1000), "-1ms"),
+        (timedelta(seconds=5), "5s"),
+        (timedelta(seconds=-5), "-5s"),
+        (timedelta(minutes=1), "1m"),
+        (timedelta(minutes=-1), "-1m"),
+        (timedelta(seconds=65), "1m5s"),
+        (timedelta(seconds=-65), "-1m5s"),
+        (timedelta(minutes=65), "1h5m"),
+        (timedelta(minutes=-65), "-1h5m"),
+        (timedelta(minutes=65, seconds=10), "1h5m10s"),
+        (timedelta(minutes=65, seconds=10, milliseconds=25), "1h5m10s25ms"),
+        (
+            timedelta(minutes=65, seconds=10, milliseconds=25, microseconds=100),
+            "1h5m10s25ms100μs",
+        ),
+        (timedelta(days=1, hours=5), "1d5h"),
+        (timedelta(weeks=2, hours=5), "14d5h"),
+    ]:
+        assert timedelta_pretty(inp) == expected

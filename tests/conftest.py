@@ -1,8 +1,7 @@
 import pytest
-import random
 import os
 import os.path
-from aptly_ctl.debian import Package
+from aptly_ctl.aptly import Package
 
 
 @pytest.fixture
