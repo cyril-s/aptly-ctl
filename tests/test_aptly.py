@@ -110,6 +110,65 @@ class TestAptly:
         with pytest.raises(aptly_ctl.exceptions.AptlyApiError):
             aptly.repo_show(name)
 
+    def test_repo_add_packages(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        files = [pkg.file.origpath for pkg in packages_simple]
+        directory = rand("dir")
+        aptly.files_upload(files, directory)
+        repo = aptly.repo_create(rand("repo"))
+        report = aptly.repo_add_packages(repo.name, directory)
+        assert not report.failed
+        assert not report.warnings
+        assert not report.removed
+        assert set(report.added) == set(pkg.dir_ref for pkg in packages_simple)
+
+    def test_repo_add_packages_one_file(
+        self, aptly: Aptly, packages_simple: Sequence[Package]
+    ):
+        pkg = list(packages_simple)[0]
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath], directory)
+        repo = aptly.repo_create(rand("repo"))
+        report = aptly.repo_add_packages(repo.name, directory, pkg.file.filename)
+        assert not report.failed
+        assert not report.warnings
+        assert not report.removed
+        assert len(report.added) == 1
+        assert report.added[0] == pkg.dir_ref
+
+    def test_repo_add_packages_conflict(
+        self, aptly: Aptly, packages_conflict: Sequence[Package]
+    ):
+        pkgs = list(packages_conflict)
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in pkgs], directory)
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory, pkgs[0].file.filename)
+        report = aptly.repo_add_packages(repo.name, directory, pkgs[1].file.filename)
+        assert len(report.failed) == 1
+        assert pkgs[1].file.filename in report.failed[0]
+        assert len(report.warnings) == 1
+        assert pkgs[1].dir_ref in report.warnings[0]
+        assert not report.removed
+        assert not report.added
+
+    def test_repo_add_packages_conflict_force_replace(
+        self, aptly: Aptly, packages_conflict: Sequence[Package]
+    ):
+        pkgs = list(packages_conflict)
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in pkgs], directory)
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory, pkgs[0].file.filename)
+        report = aptly.repo_add_packages(
+            repo.name, directory, pkgs[1].file.filename, force_replace=True
+        )
+        assert not report.failed
+        assert not report.warnings
+        assert len(report.removed) == 1
+        assert pkgs[0].dir_ref in report.removed[0]
+        assert len(report.added) == 1
+        assert report.added[0] == pkgs[1].dir_ref
+
     def test_snapshot_show_no_snapshot_error(test, aptly: aptly_ctl.aptly.Aptly):
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
             aptly.snapshot_show(rand("test"))

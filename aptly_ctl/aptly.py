@@ -421,6 +421,13 @@ class Publish(NamedTuple):
         return prefix
 
 
+class FilesReport(NamedTuple):
+    failed: Sequence[str] = ()
+    added: Sequence[str] = ()
+    removed: Sequence[str] = ()
+    warnings: Sequence[str] = ()
+
+
 class Aptly:
     """Aptly API client with more convenient commands"""
 
@@ -619,6 +626,32 @@ class Aptly:
         if force:
             params["force"] = "1"
         self._request("DELETE", url, params=params)
+
+    def repo_add_packages(
+        self,
+        name: str,
+        directory: str,
+        file: str = "",
+        no_remove: bool = False,
+        force_replace: bool = False,
+    ) -> FilesReport:
+        url = urljoin(self.url, self.repos_url_path, name, "file", directory)
+        if file:
+            url = urljoin(url, file)
+        params = {}  # type: Dict[str, str]
+        if no_remove:
+            params["noRemove"] = "1"
+        if force_replace:
+            params["forceReplace"] = "1"
+        resp, _ = self._request("POST", url, params=params)
+        # remove " added" in "Added":["aptly_0.9~dev+217+ge5d646c_i386 added"]
+        added = [s.split(" ")[0] for s in resp["Report"]["Added"]]
+        return FilesReport(
+            failed=resp["FailedFiles"],
+            added=added,
+            removed=resp["Report"]["Removed"],
+            warnings=resp["Report"]["Warnings"],
+        )
 
     def snapshot_show(self, name: str) -> Snapshot:
         """
