@@ -183,10 +183,25 @@ class Repo(NamedTuple):
     """Represents local repo in aptly"""
 
     name: str
-    comment: Optional[str] = None
-    default_distribution: Optional[str] = None
-    default_component: Optional[str] = None
+    comment: str = ""
+    default_distribution: str = ""
+    default_component: str = ""
     packages: FrozenSet[Package] = frozenset()
+
+    @classmethod
+    def from_api_response(cls, resp: Dict[str, str]) -> "Repo":
+        """Create repo instance from API json response"""
+        kwargs = {}  # type: Dict[str, Any]
+        for key, tgt_key in [
+            ("Name", "name"),
+            ("Comment", "comment"),
+            ("DefaultDistribution", "default_distribution"),
+            ("DefaultComponent", "default_component"),
+        ]:
+            if key in resp:
+                kwargs[tgt_key] = resp[key]
+
+        return cls(**kwargs)
 
     @classmethod
     def from_aptly_api(
@@ -409,6 +424,8 @@ class Publish(NamedTuple):
 class Aptly:
     """Aptly API client with more convenient commands"""
 
+    files_url_path: ClassVar[str] = "api/files"
+    repos_url_path: ClassVar[str] = "api/repos"
     publish_url_path: ClassVar[str] = "api/publish"
 
     def __init__(
@@ -439,104 +456,169 @@ class Aptly:
             prefix + "/" + distribution, self.default_signing_config
         )
 
-    def repo_show(self, name: str) -> Repo:
-        """
-        Returns aptly_ctl.types.Repo representing local repo 'name' or
-        raises AtplyCtlError if such local repo does not exist
-
-        Arguments:
-            name -- local repo name
-        """
-        try:
-            show_result = self.aptly.repos.show(name)
-        except AptlyAPIException as exc:
-            if exc.status_code == 404:
-                raise RepoNotFoundError(name)
-            raise
+    def _request(
+        self,
+        method: str,
+        url: str,
+        data: Union[Dict[str, Any], List[Dict[str, Any]]] = None,
+        params: Dict[str, str] = None,
+        files: Dict[str, Tuple[str, bytes]] = None,
+    ) -> Tuple[Any, int]:
+        start = datetime.now()
+        if params:
+            logger.debug("sending %s %s params: %s", method, url, params)
+            resp = self.http.request_encode_url(method, url, fields=params)
+        elif files:
+            filenames = [
+                "{} {} bytes".format(file_tuple[0], len(file_tuple[1]))
+                for file_tuple in files.values()
+            ]
+            logger.debug("sending %s %s files: %s", method, url, filenames)
+            resp = self.http.request_encode_body(method, url, fields=files)
         else:
-            return Repo.from_aptly_api(show_result)
+            encoded_data = json.dumps(data).encode("utf-8") if data else None
+            logger.debug("sending %s %s data: %s", method, url, encoded_data)
+            resp = self.http.request(
+                method,
+                url,
+                body=encoded_data,
+                headers={"Content-Type": "application/json"},
+            )
+        logger.debug(
+            "response on %s %s took %s returned %s: %s",
+            method,
+            url,
+            timedelta_pretty(datetime.now() - start),
+            resp.status,
+            resp.data,
+        )
+        if resp.status < 200 or resp.status >= 300:
+            raise AptlyApiError(resp.status, resp.data)
+        resp_data = json.loads(resp.data.decode("utf-8"))
+        return resp_data, resp.status
 
-    def repo_list(self) -> Tuple[Repo, ...]:
-        """Returns all local repos as tuple of aptly_ctl.types.Repo"""
-        return tuple(map(Repo.from_aptly_api, self.aptly.repos.list()))
+    def files_upload(self, files: Sequence[str], directory: str) -> List[str]:
+        url = urljoin(self.url, self.files_url_path, directory)
+        fields = {}  # type: Dict[str, Tuple[str, bytes]]
+        for fpath in files:
+            filename = os.path.basename(fpath)
+            with open(fpath, "br") as f:
+                fields[filename] = (filename, f.read())
+        resp, _ = self._request("POST", url, files=fields)
+        return cast(List[str], resp)
+
+    def files_list(self, directory: str) -> List[str]:
+        url = urljoin(self.url, self.files_url_path, directory)
+        resp, _ = self._request("GET", url)
+        return cast(List[str], resp)
+
+    def files_list_dirs(self) -> List[str]:
+        resp, _ = self._request("GET", urljoin(self.url, self.files_url_path))
+        return cast(List[str], resp)
+
+    def files_delete_dir(self, directory: str) -> None:
+        url = urljoin(self.url, self.files_url_path, directory)
+        self._request("DELETE", url)
+
+    def files_delete_file(self, directory: str, file: str) -> None:
+        url = urljoin(self.url, self.files_url_path, directory, file)
+        self._request("DELETE", url)
 
     def repo_create(
-        self, name: str, comment: str = None, dist: str = None, comp: str = None
+        self,
+        name: str,
+        comment: str = "",
+        default_distribution: str = "",
+        default_component: str = "",
     ) -> Repo:
         """
-        Creates new repo 'name'. Raises AtplyCtlEror if such repo exists
+        Creates new local repo
 
         Arguments:
             name -- local repo name
-
-        Keyword arguments:
             comment -- comment for local repo
-            dist -- default distribution. Usefull when creating publishes
-            comp -- default component. Usefull when creating publishes
+            default_distribution -- default distribution. When creating publish
+                from local repo, this attribute is looked up to determine target
+                distribution for publish if it is not supplied explicitly.
+            default_component -- default component. When creating publish
+                from local repo, this attribute is looked up to determine target
+                component for this repo if it is not supplied explicitly.
         """
-        try:
-            create_result = self.aptly.repos.create(name, comment, dist, comp)
-        except AptlyAPIException as exc:
-            # repo with this name already exists
-            if exc.status_code == 400:
-                raise InvalidOperationError(str(exc))
-            raise
-        else:
-            logger.info("Created repo %s", create_result)
-            return Repo.from_aptly_api(create_result)
+        body = {"Name": name}
+        if comment:
+            body["Comment"] = comment
+        if default_distribution:
+            body["DefaultDistribution"] = default_distribution
+        if default_component:
+            body["DefaultComponent"] = default_component
+        url = urljoin(self.url, self.repos_url_path)
+        repo_data, _ = self._request("POST", url, body)
+        repo_data = cast(Dict[str, str], repo_data)
+        return Repo.from_api_response(repo_data)
+
+    def repo_show(self, name: str) -> Repo:
+        """
+        Get info about local repo
+
+        Arguments:
+            name -- local repo name
+        """
+        url = urljoin(self.url, self.repos_url_path, name)
+        repo_data, _ = self._request("GET", url)
+        repo_data = cast(Dict[str, str], repo_data)
+        return Repo.from_api_response(repo_data)
+
+    def repo_list(self) -> Sequence[Repo]:
+        """Return a list of all the local repos"""
+        repo_list, _ = self._request("GET", urljoin(self.url, self.repos_url_path))
+        repo_list = cast(List[Dict[str, str]], repo_list)
+        return [Repo.from_api_response(repo) for repo in repo_list]
 
     def repo_edit(
-        self, name: str, comment: str = None, dist: str = None, comp: str = None
+        self,
+        name: str,
+        comment: str = "",
+        default_distribution: str = "",
+        default_component: str = "",
     ) -> Repo:
         """
-        Modifies local repo named 'name'. Raises AptlyCtlError if there is no
-        repo named 'name' or no fields to modify were supplied
+        Edit local repo.
 
         Arguments:
             name -- local repo name
-
-        Keyword arguments:
             comment -- comment for local repo
-            dist -- default distribution. Usefull when creating publishes
-            comp -- default component. Usefull when creating publishes
+            default_distribution -- default distribution. When creating publish
+                from local repo, this attribute is looked up to determine target
+                distribution for publish if it is not supplied explicitly.
+            default_component -- default component. When creating publish
+                from local repo, this attribute is looked up to determine target
+                component for this repo if it is not supplied explicitly.
         """
-        try:
-            edit_result = self.aptly.repos.edit(name, comment, dist, comp)
-        except AptlyAPIException as exc:
-            # 0 - at least one of comment, dist, comp required
-            # 404 - repo with this name not found
-            if exc.status_code == 0:
-                raise InvalidOperationError(str(exc))
-            if exc.status_code == 404:
-                raise RepoNotFoundError(name)
-            raise
-        else:
-            logger.info("Edited repo: %s", edit_result)
-            return Repo.from_aptly_api(edit_result)
+        body = {}  # type: Dict[str, str]
+        if comment:
+            body["Comment"] = comment
+        if default_distribution:
+            body["DefaultDistribution"] = default_distribution
+        if default_component:
+            body["DefaultComponent"] = default_component
+        url = urljoin(self.url, self.repos_url_path, name)
+        repo_data, _ = self._request("PUT", url, body)
+        repo_data = cast(Dict[str, str], repo_data)
+        return Repo.from_api_response(repo_data)
 
     def repo_delete(self, name: str, force: bool = False) -> None:
         """
-        Delete repo named 'name'. Raises AptlyCtlError if there is no such repo
-        or when trying to delete repo pointed by snapshot with force=False
+        Delete local repo named
 
         Arguments:
             name -- local repo name
-
-        Keyword arguments:
             force -- delete local repo even if it's pointed by a snapshot
         """
-        try:
-            self.aptly.repos.delete(name, force)
-        except AptlyAPIException as exc:
-            # 404 - repo with this name not found
-            # 409 - repository can’t be dropped
-            if exc.status_code == 404:
-                raise RepoNotFoundError(name)
-            if exc.status_code == 409:
-                raise InvalidOperationError(str(exc))
-            raise
-        else:
-            logger.info("Deleted repo %s", name)
+        url = urljoin(self.url, self.repos_url_path, name)
+        params = {}  # type: Dict[str, str]
+        if force:
+            params["force"] = "1"
+        self._request("DELETE", url, params=params)
 
     def snapshot_show(self, name: str) -> Snapshot:
         """
@@ -925,31 +1007,6 @@ class Aptly:
                 else:
                     raise
         return fails
-
-    def _request(
-        self,
-        method: str,
-        url: str,
-        data: Union[Dict[str, Any], List[Dict[str, Any]]] = None,
-    ) -> Tuple[Union[Dict[str, Any], List[Dict[str, Any]]], int]:
-        encoded_data = json.dumps(data).encode("utf-8") if data else None
-        start = datetime.now()
-        logger.debug("sending  %s %s data: %s", method, url, encoded_data)
-        resp = self.http.request(
-            method, url, body=encoded_data, headers={"Content-Type": "application/json"}
-        )
-        logger.debug(
-            "response on %s %s took %s returned %s: %s",
-            method,
-            url,
-            timedelta_pretty(datetime.now() - start),
-            resp.status,
-            resp.data,
-        )
-        if resp.status < 200 or resp.status >= 300:
-            raise AptlyApiError(resp.status, resp.data)
-        resp_data = json.loads(resp.data.decode("utf-8"))
-        return resp_data, resp.status
 
     def publish_create(
         self,

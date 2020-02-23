@@ -1,8 +1,10 @@
 import pytest  # type: ignore
 import random
-from typing import Iterator
+from typing import Iterator, Sequence
+import os.path
 import aptly_ctl.aptly
-from aptly_ctl.aptly import Repo, Snapshot, Publish, Source
+from aptly_ctl.aptly import Aptly
+from aptly_ctl.aptly import Repo, Snapshot, Publish, Source, Package
 import aptly_ctl.exceptions
 
 
@@ -27,53 +29,86 @@ class TestAptly:
             aptly.repo_delete(repo.name, force=True)
         for snapshot in aptly.snapshot_list():
             aptly.snapshot_delete(snapshot.name, force=True)
+        for d in aptly.files_list_dirs():
+            aptly.files_delete_dir(d)
 
-    def test_repo_show_no_repo_error(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.repo_show(rand("test"))
-
-    def test_repo_create(self, aptly: aptly_ctl.aptly.Aptly):
-        expexted_repo = Repo(rand("test"), "comment", "sid", "main", frozenset())
-        created_repo = aptly.repo_create(
-            expexted_repo.name,
-            expexted_repo.comment,
-            expexted_repo.default_distribution,
-            expexted_repo.default_component,
+    def test_files_upload(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        files = [pkg.file.origpath for pkg in packages_simple]
+        directory = rand("dir")
+        resp = aptly.files_upload(files, directory)
+        assert set(resp) == set(
+            os.path.join(directory, pkg.file.filename) for pkg in packages_simple
         )
-        assert created_repo == expexted_repo
-        shown_repo = aptly.repo_show(created_repo.name)
-        assert shown_repo == expexted_repo
 
-    def test_repo_create_same_name_error(self, aptly: aptly_ctl.aptly.Aptly):
-        args = (rand("test"), "comment", "sid", "main")
-        aptly.repo_create(*args)
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.repo_create(*args)
+    def test_files_list_dirs(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        files = [pkg.file.origpath for pkg in packages_simple]
+        directory = rand("dir")
+        aptly.files_upload(files, directory)
+        assert [directory] == aptly.files_list_dirs()
 
-    def test_repo_edit(self, aptly: aptly_ctl.aptly.Aptly):
-        name = rand("test")
-        orig_args = (name, "comment", "sid", "main")
-        edited_agrs = (name, "new comment", "buster", "contrib")
-        expected_repo = Repo(*edited_agrs, packages=frozenset())
-        aptly.repo_create(*orig_args)
-        edited_repo = aptly.repo_edit(*edited_agrs)
-        assert edited_repo == expected_repo
+    def test_files_list(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        files = [pkg.file.origpath for pkg in packages_simple]
+        directory = rand("dir")
+        aptly.files_upload(files, directory)
+        resp = aptly.files_list(directory)
+        assert set(resp) == set(pkg.file.filename for pkg in packages_simple)
 
-    def test_repo_edit_no_repo_error(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.repo_edit(rand("test"), comment="bla")
+    def test_files_delete_file(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        files = [pkg.file.origpath for pkg in packages_simple]
+        deleted_file = os.path.basename(files[0])
+        directory = rand("dir")
+        aptly.files_upload(files, directory)
+        aptly.files_delete_file(directory, deleted_file)
+        assert deleted_file not in aptly.files_list(directory)
+
+    def test_files_delete_dir(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        files = [pkg.file.origpath for pkg in packages_simple]
+        directory = rand("dir")
+        aptly.files_upload(files, directory)
+        aptly.files_delete_dir(directory)
+        assert directory not in aptly.files_list_dirs()
+
+    def test_repo_create_and_show(self, aptly: Aptly):
+        for kwargs in [
+            {"name": rand("test")},
+            {"name": rand("test"), "comment": "comment"},
+            {
+                "name": rand("test"),
+                "comment": "comment",
+                "default_distribution": "buster",
+            },
+            {
+                "name": rand("test"),
+                "comment": "comment",
+                "default_distribution": "buster",
+                "default_component": "contrib",
+            },
+        ]:
+            repo = Repo(**kwargs)
+            assert aptly.repo_create(**kwargs) == repo
+            assert aptly.repo_show(kwargs["name"]) == repo
+
+    def test_repo_list(self, aptly: Aptly):
+        repos = set()
+        assert not aptly.repo_list()
+        repos.add(aptly.repo_create(rand("test")))
+        assert set(aptly.repo_list()) == repos
+        repos.add(aptly.repo_create(rand("test"), "comment"))
+        assert set(aptly.repo_list()) == repos
+
+    def test_repo_edit(self, aptly: Aptly):
+        src = Repo(rand("repo"))
+        tgt = src._replace(comment="comment")
+        assert aptly.repo_create(src.name) == src
+        assert aptly.repo_edit(tgt.name, tgt.comment) == tgt
 
     def test_repo_delete(self, aptly: aptly_ctl.aptly.Aptly):
         name = rand("test")
         aptly.repo_create(name)
         aptly.repo_show(name)
         aptly.repo_delete(name)
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
+        with pytest.raises(aptly_ctl.exceptions.AptlyApiError):
             aptly.repo_show(name)
-
-    def test_repo_delete_no_repo_error(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.repo_delete(rand("test"))
 
     def test_snapshot_show_no_snapshot_error(test, aptly: aptly_ctl.aptly.Aptly):
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
@@ -442,9 +477,9 @@ class TestPublish:
         assert p_repos.sources == frozenset(sources_repos)
         assert p_snaps.sources == frozenset(sources_snaps)
         for p in [p_repos, p_snaps]:
-            assert p.storage is ""
-            assert p.prefix is ""
-            assert p.distribution is ""
+            assert p.storage == ""
+            assert p.prefix == ""
+            assert p.distribution == ""
             assert p.full_prefix == "."
             assert p.full_prefix_escaped == ":."
 
