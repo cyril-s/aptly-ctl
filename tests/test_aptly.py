@@ -138,6 +138,7 @@ class TestAptly:
     def test_repo_add_packages_conflict(
         self, aptly: Aptly, packages_conflict: Sequence[Package]
     ):
+        assert len(packages_conflict) == 2
         pkgs = list(packages_conflict)
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in pkgs], directory)
@@ -154,6 +155,7 @@ class TestAptly:
     def test_repo_add_packages_conflict_force_replace(
         self, aptly: Aptly, packages_conflict: Sequence[Package]
     ):
+        assert len(packages_conflict) == 2
         pkgs = list(packages_conflict)
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in pkgs], directory)
@@ -168,6 +170,47 @@ class TestAptly:
         assert pkgs[0].dir_ref in report.removed[0]
         assert len(report.added) == 1
         assert report.added[0] == pkgs[1].dir_ref
+
+    def test_repo_add_packages_by_key(
+        self, aptly: Aptly, packages_simple: Sequence[Package]
+    ):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+        src_repo = aptly.repo_create(rand("repo"))
+        tgt_repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(src_repo.name, directory)
+        resp = aptly.repo_add_packages_by_key(
+            tgt_repo.name, [pkg.key for pkg in packages_simple]
+        )
+        assert resp == tgt_repo
+
+    @pytest.mark.xfail
+    def test_repo_add_packages_by_key_conflict(
+        self, aptly: Aptly, packages_conflict: Sequence[Package]
+    ):
+        assert len(packages_conflict) == 2
+        directory = rand("dir")
+        pkgs = list(packages_conflict)
+        aptly.files_upload([pkg.file.origpath for pkg in pkgs], directory)
+        src_repo1 = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(src_repo1.name, directory, pkgs[0].file.filename)
+        src_repo2 = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(src_repo2.name, directory, pkgs[1].file.filename)
+        tgt_repo = aptly.repo_create(rand("repo"))
+        resp = aptly.repo_add_packages_by_key(tgt_repo.name, [pkg.key for pkg in pkgs])
+        assert resp == tgt_repo
+
+    def test_repo_delete_packages_by_key(
+        self, aptly: Aptly, packages_simple: Sequence[Package]
+    ):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory)
+        resp = aptly.repo_delete_packages_by_key(
+            repo.name, [pkg.key for pkg in packages_simple]
+        )
+        assert resp == repo
 
     def test_snapshot_show_no_snapshot_error(test, aptly: aptly_ctl.aptly.Aptly):
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):

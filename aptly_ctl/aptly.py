@@ -653,6 +653,21 @@ class Aptly:
             warnings=resp["Report"]["Warnings"],
         )
 
+    def _repo_add_delete_by_key(
+        self, method: str, name: str, keys: Sequence[str]
+    ) -> Repo:
+        url = urljoin(self.url, self.repos_url_path, name, "packages")
+        body = {"PackageRefs": keys}
+        repo_data, _ = self._request(method, url, data=body)
+        repo_data = cast(Dict[str, str], repo_data)
+        return Repo.from_api_response(repo_data)
+
+    def repo_add_packages_by_key(self, name: str, keys: Sequence[str]) -> Repo:
+        return self._repo_add_delete_by_key("POST", name, keys)
+
+    def repo_delete_packages_by_key(self, name: str, keys: Sequence[str]) -> Repo:
+        return self._repo_add_delete_by_key("DELETE", name, keys)
+
     def snapshot_show(self, name: str) -> Snapshot:
         """
         Returns aptly_ctl.types.Snapshot representing snapshot 'name' or
