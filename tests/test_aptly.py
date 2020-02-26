@@ -3,13 +3,106 @@ import random
 from typing import Iterator, Sequence
 import os.path
 import aptly_ctl.aptly
+from datetime import datetime
 from aptly_ctl.aptly import Aptly
-from aptly_ctl.aptly import Repo, Snapshot, Publish, Source, Package
-import aptly_ctl.exceptions
+from aptly_ctl.aptly import Repo, Snapshot, Source, Package, PackageFileInfo
+from aptly_ctl.exceptions import AptlyApiError
+from aptly_ctl.debian import Version
 
 
 def rand(prefix: str = "") -> str:
     return "{}{}".format(prefix, random.randrange(100000))
+
+
+# new Debian package, version 2.0.
+# size 4703664 bytes: control archive=1668 bytes.
+#    2697 bytes,    25 lines      control
+#     397 bytes,     6 lines      md5sums
+# Package: aptly
+# Version: 1.3.0+ds1-2.2~deb10u1
+# Architecture: amd64
+# Maintainer: Sebastien Delafond <seb@debian.org>
+# Installed-Size: 19022
+# Depends: bzip2, xz-utils, gnupg1, gpgv1, libc6 (>= 2.3.2)
+# Suggests: graphviz
+# Built-Using: golang-1.11 (= 1.11.6-1), golang-github-aleksi-pointer (= 1.0.0+git20180620.11deede-1), golang-github-awalterschulze-gographviz (= 2.0+git20180607.da5c847-1), golang-github-aws-aws-sdk-go (= 1.16.18+dfsg-1), golang-github-disposaboy-jsonconfigreader (= 0.0~git20171218.5ea4d0d-2), golang-github-gin-contrib-sse (= 0.0~git20170109.0.22d885f-1), golang-github-gin-gonic-gin (= 1.3.0+dfsg1-3), golang-github-golang-snappy (= 0.0+git20160529.d9eb7a3-3), golang-github-jlaffaye-ftp (= 0.0~git20170707.0.a05056b-1), golang-github-jmespath-go-jmespath (= 0.2.2-2), golang-github-kjk-lzma (= 1.0.0-5), golang-github-mattn-go-isatty (= 0.0.4-1), golang-github-mattn-go-runewidth (= 0.0.4-1), golang-github-mattn-go-shellwords (= 1.0.3-1), golang-github-mkrautz-goar (= 0.0~git20150919.282caa8-1), golang-github-mxk-go-flowrate (= 0.0~git20140419.0.cca7078-1), golang-github-ncw-swift (= 0.0~git20180327.b2a7479-2), golang-github-pborman-uuid (= 1.1-1), golang-github-pkg-errors (= 0.8.1-1), golang-github-smira-commander (= 0.0~git20140515.f408b00-1), golang-github-smira-flag (= 0.0~git20170926.695ea5e-1), golang-github-smira-go-aws-auth (= 0.0~git20160320.0070896-1), golang-github-smira-go-ftp-protocol (= 0.0~git20140829.066b75c-2), golang-github-smira-go-xz (= 0.0~git20150414.0c531f0-2), golang-github-ugorji-go-codec (= 1.1.1-1), golang-github-wsxiaoys-terminal (= 0.0~git20160513.0.0940f3f-1), golang-go.crypto (= 1:0.0~git20181203.505ab14-1), golang-golang-x-sys (= 0.0~git20181228.9a3f9b0-1), golang-goleveldb (= 0.0~git20170725.0.b89cc31-2), golang-gopkg-cheggaaa-pb.v1 (= 1.0.25-1), golang-gopkg-go-playground-validator.v8 (= 8.18.1-1), golang-gopkg-h2non-filetype.v1 (= 1.0.5+ds1-2), golang-goprotobuf (= 1.2.0-1), golang-yaml.v2 (= 2.2.2-1)
+# Section: utils
+# Priority: optional
+# Homepage: http://www.aptly.info
+# Description: Swiss army knife for Debian repository management - main package
+#  It offers several features making it easy to manage Debian package
+#  repositories:
+#  .
+#   - make mirrors of remote Debian/Ubuntu repositories, limiting by
+#     components/architectures
+#   - take snapshots of mirrors at any point in time, fixing state of
+#     repository at some moment of time
+#   - publish snapshot as Debian repository, ready to be consumed by apt
+#   - controlled update of one or more packages in snapshot from upstream
+#     mirror, tracking dependencies
+#   - merge two or more snapshots into one
+#  .
+#  This is the main package, it contains the aptly command-line utility.
+class TestPackage:
+    def test_from_file(self):
+        expected_file_info = PackageFileInfo(
+            filename="aptly_1.3.0+ds1-2.2~deb10u1_amd64.deb",
+            path="tests/packages/db/aptly_1.3.0+ds1-2.2~deb10u1_amd64.deb",  # stripped full path
+            origpath="tests/packages/db/aptly_1.3.0+ds1-2.2~deb10u1_amd64.deb",
+            size=4703664,
+            md5="7d2fd2ee7f3ad630ea4f92fcdadd36be",
+            sha1="b72c6203a93b3f276f8a3613d61f880a96dacc7d",
+            sha256="a165d40d93a6aba4e008b4bc5933a1f2d11e72c85b49fd4cfce4f01905755f80",
+        )
+
+        expected_fields = {
+            "Filename": "aptly_1.3.0+ds1-2.2~deb10u1_amd64.deb",
+            "FilesHash": "89e028161a5a6661",
+            "Key": "Pamd64 aptly 1.3.0+ds1-2.2~deb10u1 89e028161a5a6661",
+            "MD5sum": "7d2fd2ee7f3ad630ea4f92fcdadd36be",
+            "SHA1": "b72c6203a93b3f276f8a3613d61f880a96dacc7d",
+            "SHA256": "a165d40d93a6aba4e008b4bc5933a1f2d11e72c85b49fd4cfce4f01905755f80",
+            "SHA512": "82aa58eb18f8247b7a03143d1945fe9c845ed335ae4e3583ee1153e3e9d55670dadcdbfca01ce735806e7ef65445e7727b39546355e00269ceda443a66cd2d44",
+            "ShortKey": "Pamd64 aptly 1.3.0+ds1-2.2~deb10u1",
+            "Size": "4703664",
+            "Package": "aptly",
+            "Version": "1.3.0+ds1-2.2~deb10u1",
+            "Architecture": "amd64",
+            "Maintainer": "Sebastien Delafond <seb@debian.org>",
+            "Installed-Size": "19022",
+            "Depends": "bzip2, xz-utils, gnupg1, gpgv1, libc6 (>= 2.3.2)",
+            "Suggests": "graphviz",
+            "Built-Using": "golang-1.11 (= 1.11.6-1), golang-github-aleksi-pointer (= 1.0.0+git20180620.11deede-1), golang-github-awalterschulze-gographviz (= 2.0+git20180607.da5c847-1), golang-github-aws-aws-sdk-go (= 1.16.18+dfsg-1), golang-github-disposaboy-jsonconfigreader (= 0.0~git20171218.5ea4d0d-2), golang-github-gin-contrib-sse (= 0.0~git20170109.0.22d885f-1), golang-github-gin-gonic-gin (= 1.3.0+dfsg1-3), golang-github-golang-snappy (= 0.0+git20160529.d9eb7a3-3), golang-github-jlaffaye-ftp (= 0.0~git20170707.0.a05056b-1), golang-github-jmespath-go-jmespath (= 0.2.2-2), golang-github-kjk-lzma (= 1.0.0-5), golang-github-mattn-go-isatty (= 0.0.4-1), golang-github-mattn-go-runewidth (= 0.0.4-1), golang-github-mattn-go-shellwords (= 1.0.3-1), golang-github-mkrautz-goar (= 0.0~git20150919.282caa8-1), golang-github-mxk-go-flowrate (= 0.0~git20140419.0.cca7078-1), golang-github-ncw-swift (= 0.0~git20180327.b2a7479-2), golang-github-pborman-uuid (= 1.1-1), golang-github-pkg-errors (= 0.8.1-1), golang-github-smira-commander (= 0.0~git20140515.f408b00-1), golang-github-smira-flag (= 0.0~git20170926.695ea5e-1), golang-github-smira-go-aws-auth (= 0.0~git20160320.0070896-1), golang-github-smira-go-ftp-protocol (= 0.0~git20140829.066b75c-2), golang-github-smira-go-xz (= 0.0~git20150414.0c531f0-2), golang-github-ugorji-go-codec (= 1.1.1-1), golang-github-wsxiaoys-terminal (= 0.0~git20160513.0.0940f3f-1), golang-go.crypto (= 1:0.0~git20181203.505ab14-1), golang-golang-x-sys (= 0.0~git20181228.9a3f9b0-1), golang-goleveldb (= 0.0~git20170725.0.b89cc31-2), golang-gopkg-cheggaaa-pb.v1 (= 1.0.25-1), golang-gopkg-go-playground-validator.v8 (= 8.18.1-1), golang-gopkg-h2non-filetype.v1 (= 1.0.5+ds1-2), golang-goprotobuf (= 1.2.0-1), golang-yaml.v2 (= 2.2.2-1)",
+            "Section": "utils",
+            "Priority": "optional",
+            "Homepage": "http://www.aptly.info",
+            "Description": """ Swiss army knife for Debian repository management - main package
+ It offers several features making it easy to manage Debian package
+ repositories:
+ .
+  - make mirrors of remote Debian/Ubuntu repositories, limiting by
+    components/architectures
+  - take snapshots of mirrors at any point in time, fixing state of
+    repository at some moment of time
+  - publish snapshot as Debian repository, ready to be consumed by apt
+  - controlled update of one or more packages in snapshot from upstream
+    mirror, tracking dependencies
+  - merge two or more snapshots into one
+ .
+ This is the main package, it contains the aptly command-line utility.
+""",
+        }
+        pkg = Package.from_file(
+            "tests/packages/db/aptly_1.3.0+ds1-2.2~deb10u1_amd64.deb"
+        )
+        assert pkg.name == "aptly"
+        assert pkg.version == Version("1.3.0+ds1-2.2~deb10u1")
+        assert pkg.arch == "amd64"
+        assert pkg.prefix == ""
+        assert pkg.files_hash == "89e028161a5a6661"
+        assert pkg.file._replace(path="") == expected_file_info._replace(path="")
+        assert pkg.file.path.endswith(expected_file_info.path)
+        assert pkg.fields == expected_fields
 
 
 class TestAptly:
@@ -107,8 +200,15 @@ class TestAptly:
         aptly.repo_create(name)
         aptly.repo_show(name)
         aptly.repo_delete(name)
-        with pytest.raises(aptly_ctl.exceptions.AptlyApiError):
+        with pytest.raises(AptlyApiError, match=r"local repo.*not found"):
             aptly.repo_show(name)
+
+    def test_repo_delete_force(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("repo"))
+        aptly.snapshot_create_from_repo(repo.name, rand("snap"))
+        with pytest.raises(AptlyApiError, match="unable to drop.*has snapshots"):
+            aptly.repo_delete(repo.name)
+        aptly.repo_delete(repo.name, True)
 
     def test_repo_add_packages(self, aptly: Aptly, packages_simple: Sequence[Package]):
         files = [pkg.file.origpath for pkg in packages_simple]
@@ -171,134 +271,393 @@ class TestAptly:
         assert len(report.added) == 1
         assert report.added[0] == pkgs[1].dir_ref
 
+    def test_repo_search(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory)
+
+        expected_pkgs = [
+            pkg._replace(file=None, fields=None) for pkg in packages_simple
+        ]
+        found_pkgs = aptly.repo_search(repo.name)
+        assert sorted(expected_pkgs) == sorted(found_pkgs)
+
+    def test_repo_search_details(
+        self, aptly: Aptly, packages_simple: Sequence[Package]
+    ):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory)
+
+        expected_pkgs = [pkg._replace(file=None) for pkg in packages_simple]
+        found_pkgs = aptly.repo_search(repo.name, details=True)
+        expected_pkgs.sort()
+        found_pkgs.sort()
+        assert len(expected_pkgs) == len(found_pkgs)
+        for found_pkg, expexted_pkg in zip(found_pkgs, expected_pkgs):
+            assert found_pkg.fields == expexted_pkg.fields
+            assert found_pkg == expexted_pkg
+
+    def test_repo_search_with_query(
+        self, aptly: Aptly, packages_simple: Sequence[Package]
+    ):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory)
+
+        expected_pkgs = [
+            pkg._replace(file=None, fields=None)
+            for pkg in packages_simple
+            if pkg.name == "aptly"
+        ]
+        found_pkgs = aptly.repo_search(repo.name, "aptly")
+        assert sorted(expected_pkgs) == sorted(found_pkgs)
+
     def test_repo_add_packages_by_key(
         self, aptly: Aptly, packages_simple: Sequence[Package]
     ):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
         src_repo = aptly.repo_create(rand("repo"))
         tgt_repo = aptly.repo_create(rand("repo"))
+
         aptly.repo_add_packages(src_repo.name, directory)
-        resp = aptly.repo_add_packages_by_key(
+        resp_repo = aptly.repo_add_packages_by_key(
             tgt_repo.name, [pkg.key for pkg in packages_simple]
         )
-        assert resp == tgt_repo
+        assert resp_repo == tgt_repo
 
-    @pytest.mark.xfail
+        expected_pkgs = [
+            pkg._replace(file=None, fields=None) for pkg in packages_simple
+        ]
+        found_pkgs = aptly.repo_search(tgt_repo.name)
+        assert sorted(expected_pkgs) == sorted(found_pkgs)
+
     def test_repo_add_packages_by_key_conflict(
         self, aptly: Aptly, packages_conflict: Sequence[Package]
     ):
         assert len(packages_conflict) == 2
         directory = rand("dir")
-        pkgs = list(packages_conflict)
-        aptly.files_upload([pkg.file.origpath for pkg in pkgs], directory)
+        aptly.files_upload([pkg.file.origpath for pkg in packages_conflict], directory)
+
         src_repo1 = aptly.repo_create(rand("repo"))
-        aptly.repo_add_packages(src_repo1.name, directory, pkgs[0].file.filename)
         src_repo2 = aptly.repo_create(rand("repo"))
-        aptly.repo_add_packages(src_repo2.name, directory, pkgs[1].file.filename)
         tgt_repo = aptly.repo_create(rand("repo"))
-        resp = aptly.repo_add_packages_by_key(tgt_repo.name, [pkg.key for pkg in pkgs])
-        assert resp == tgt_repo
+
+        aptly.repo_add_packages(
+            src_repo1.name, directory, packages_conflict[0].file.filename
+        )
+        aptly.repo_add_packages(
+            src_repo2.name, directory, packages_conflict[1].file.filename
+        )
+
+        with pytest.raises(AptlyApiError, match=r"^conflict in package .*"):
+            aptly.repo_add_packages_by_key(
+                tgt_repo.name, [pkg.key for pkg in packages_conflict]
+            )
+
+        found_pkgs = aptly.repo_search(tgt_repo.name)
+        assert not found_pkgs
 
     def test_repo_delete_packages_by_key(
         self, aptly: Aptly, packages_simple: Sequence[Package]
     ):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
         repo = aptly.repo_create(rand("repo"))
         aptly.repo_add_packages(repo.name, directory)
-        resp = aptly.repo_delete_packages_by_key(
+
+        resp_repo = aptly.repo_delete_packages_by_key(
             repo.name, [pkg.key for pkg in packages_simple]
         )
-        assert resp == repo
+        assert resp_repo == repo
 
-    def test_snapshot_show_no_snapshot_error(test, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly.snapshot_show(rand("test"))
+        found_pkgs = aptly.repo_search(repo.name)
+        assert not found_pkgs
 
-    def test_snapshot_create(self, aptly: aptly_ctl.aptly.Aptly):
+    def test_snapshot_create_from_repo(self, aptly: Aptly):
         repo = aptly.repo_create(rand("test"))
-        expexted_snapshot = Snapshot(repo.name, "description", None, frozenset())
-        created_snapshot = aptly.snapshot_create_from_repo(
-            repo.name, expexted_snapshot.name, expexted_snapshot.description,
-        )
-        assert expexted_snapshot == created_snapshot._replace(created_at=None)
-        shown_snapshot = aptly.snapshot_show(created_snapshot.name)
-        assert expexted_snapshot == shown_snapshot._replace(created_at=None)
+        snap_name = rand("snap")
+        snap = aptly.snapshot_create_from_repo(repo.name, snap_name, "test description")
+        assert snap.name == snap_name
+        assert snap.description == "test description"
+        assert isinstance(snap.created_at, datetime)
 
-    def test_snapshot_create_no_repo_error(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.snapshot_create_from_repo(rand("repo"), rand("snap"))
+    def test_snapshot_create_from_package_keys(
+        self, aptly: Aptly, packages_simple: Sequence[Package]
+    ):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
 
-    def test_snapshot_create_same_name_error(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        args = (repo.name, rand("snap"), "description")
-        aptly.snapshot_create_from_repo(*args)
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.snapshot_create_from_repo(*args)
-
-    def test_snapshot_edit(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        name = rand("orig_snap")
-        orig_args = (name, "description")
-        edited_agrs = (rand("new_snap"), "new description")
-        expected_snapshot = Snapshot(
-            *edited_agrs, created_at=None, packages=frozenset()
-        )
-        aptly.snapshot_create_from_repo(repo.name, *orig_args)
-        edited_snapshot = aptly.snapshot_edit(name, *edited_agrs)
-        assert expected_snapshot == edited_snapshot._replace(created_at=None)
-
-    def test_snapshot_edit_no_snapshot_error(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.snapshot_edit(rand("test"), new_description="new desc")
-
-    def test_snapshot_edit_same_snapshot_name_error(self, aptly: aptly_ctl.aptly.Aptly):
         repo = aptly.repo_create(rand("repo"))
-        snap1_name = rand("snap1")
-        _ = aptly.snapshot_create_from_repo(repo.name, snap1_name)
-        snap2 = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.snapshot_edit(snap2.name, new_name=snap1_name)
+        aptly.repo_add_packages(repo.name, directory)
 
-    def test_snapshot_delete(self, aptly: aptly_ctl.aptly.Aptly):
+        snap = aptly.snapshot_create_from_package_keys(
+            rand("snap"), [pkg.key for pkg in packages_simple]
+        )
+        assert not snap.description
+        assert isinstance(snap.created_at, datetime)
+
+        found_pkgs = aptly.snapshot_search(snap.name)
+        expected_pkgs = [
+            pkg._replace(file=None, fields=None) for pkg in packages_simple
+        ]
+        assert sorted(found_pkgs) == sorted(expected_pkgs)
+
+    def test_snapshot_show(self, aptly: Aptly):
+        snap = aptly.snapshot_create_from_package_keys(rand("snap"), [])
+        assert snap == aptly.snapshot_show(snap.name)
+
+    def test_snapshot_list(self, aptly: Aptly):
+        snaps = []
+        for _ in range(5):
+            snaps.append(aptly.snapshot_create_from_package_keys(rand("snap"), []))
+        assert sorted(snaps) == sorted(aptly.snapshot_list())
+
+    def test_snapshot_edit(self, aptly: Aptly):
+        snap = aptly.snapshot_create_from_package_keys(rand("snap"), [])
+        modified_snap = aptly.snapshot_edit(snap.name)
+        assert modified_snap == snap
+        modified_snap = aptly.snapshot_edit(snap.name, new_description="test desc")
+        assert modified_snap.description == "test desc"
+        assert aptly.snapshot_show(modified_snap.name).description == "test desc"
+        new_name = rand("new_snap")
+        modified_snap = aptly.snapshot_edit(snap.name, new_name=new_name)
+        assert modified_snap.name == new_name
+        assert aptly.snapshot_show(modified_snap.name).name == new_name
+
+    def test_snapshot_delete(self, aptly: Aptly):
+        snap = aptly.snapshot_create_from_package_keys(rand("snap"), [])
+        aptly.snapshot_delete(snap.name)
+        with pytest.raises(AptlyApiError, match="snapshot.*not found"):
+            aptly.snapshot_show(snap.name)
+
+    def test_snapshot_delete_force(self, aptly: Aptly):
+        snap1 = aptly.snapshot_create_from_package_keys(rand("snap"), [])
+        aptly.snapshot_create_from_package_keys(
+            rand("snap"), [], source_snapshots=[snap1.name]
+        )
+        with pytest.raises(
+            AptlyApiError,
+            match="won't delete snapshot that was used as source for other snapshots",
+        ):
+            aptly.snapshot_delete(snap1.name)
+        aptly.snapshot_delete(snap1.name, True)
+
+    def test_snapshot_search(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory)
+
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
+
+        expected_pkgs = [
+            pkg._replace(file=None, fields=None) for pkg in packages_simple
+        ]
+        found_pkgs = aptly.snapshot_search(snap.name)
+        assert sorted(expected_pkgs) == sorted(found_pkgs)
+
+    def test_snapshot_diff(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
+        repo = aptly.repo_create(rand("repo"))
+        snap1 = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
+        aptly.repo_add_packages(repo.name, directory)
+        snap2 = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
+
+        diff = aptly.snapshot_diff(snap1.name, snap2.name)
+        assert all([line[0] is None for line in diff])
+        expected_pkgs = [
+            pkg._replace(file=None, fields=None) for pkg in packages_simple
+        ]
+        assert sorted([line[1] for line in diff]) == sorted(expected_pkgs)
+
+    def test_publish_create_from_local_repo(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="stretch",
+            architectures=["amd64"],
+        )
+        assert pub.full_prefix == "."
+        assert pub.source_kind == "local"
+        assert sorted(pub.sources) == sorted(sources)
+        assert pub.distribution == "stretch"
+
+    def test_publish_create_from_snapshot(self, aptly: Aptly):
         repo = aptly.repo_create(rand("test"))
         snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
-        aptly.snapshot_show(snap.name)
-        aptly.snapshot_delete(snap.name)
-        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly.snapshot_show(snap.name)
+        sources = [Source(snap.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="snapshot",
+            sources=sources,
+            distribution="stretch",
+            architectures=["amd64"],
+        )
+        assert pub.full_prefix == "."
+        assert pub.source_kind == "snapshot"
+        assert sorted(pub.sources) == sorted(sources)
+        assert pub.distribution == "stretch"
 
-    def test_snapshot_delete_no_snapshot_error(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly.snapshot_delete(rand("test"))
-
-    def test_repo_delete_without_force_error(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("repo"))
-        _ = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.repo_delete(repo.name)
-
-    def test_repo_delete_force(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("repo"))
-        _ = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
-        aptly.repo_delete(repo.name, force=True)
-
-    def test_snapshot_delete_without_force_error(self, aptly: aptly_ctl.aptly.Aptly):
+    def test_publish_create_with_prefix(self, aptly: Aptly):
         repo = aptly.repo_create(rand("test"))
-        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
-        _ = aptly.snapshot_create_from_snapshots(rand("snap"), [snap])
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.snapshot_delete(snap.name)
+        sources = [Source(repo.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            prefix="debian",
+            distribution="stretch",
+            architectures=["amd64"],
+        )
+        assert pub.full_prefix == "debian"
+        assert pub.source_kind == "local"
+        assert sorted(pub.sources) == sorted(sources)
+        assert pub.distribution == "stretch"
 
-    def test_snapshot_delete_force(self, aptly: aptly_ctl.aptly.Aptly):
+    def test_publish_list(self, aptly: Aptly):
         repo = aptly.repo_create(rand("test"))
-        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
-        _ = aptly.snapshot_create_from_snapshots(rand("snap"), [snap])
-        aptly.snapshot_delete(snap.name, force=True)
-        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly.snapshot_show(snap.name)
+        sources = [Source(repo.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="stretch",
+            architectures=["amd64"],
+        )
+        pub_list = aptly.publish_list()
+        assert len(pub_list) == 1
+        assert pub_list[0] == pub
 
+    def test_publish_drop(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="stretch",
+            architectures=["amd64"],
+        )
+        aptly.publish_drop(pub)
+        pub_list = aptly.publish_list()
+        assert len(pub_list) == 0
+
+    def test_publish_drop_str_args(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="stretch",
+            architectures=["amd64"],
+        )
+        aptly.publish_drop(
+            storage=pub.storage, prefix=pub.prefix, distribution=pub.distribution
+        )
+        pub_list = aptly.publish_list()
+        assert len(pub_list) == 0
+
+    def test_publish_update_from_local_repo(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="buster",
+            architectures=["amd64"],
+        )
+        updated_pub = aptly.publish_update(pub)
+        assert updated_pub.prefix == "."
+        assert updated_pub.source_kind == "local"
+        assert sorted(updated_pub.sources) == sorted(sources)
+
+    def test_publish_update_from_local_repo_str_args(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("test"))
+        sources = [Source(repo.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="buster",
+            architectures=["amd64"],
+        )
+        updated_pub = aptly.publish_update(
+            storage=pub.storage,
+            prefix=pub.prefix,
+            distribution=pub.distribution,
+            acquire_by_hash=pub.acquire_by_hash,
+        )
+        assert updated_pub.prefix == "."
+        assert updated_pub.source_kind == "local"
+        assert sorted(updated_pub.sources) == sorted(sources)
+
+    def test_publish_update_switch_snapshot(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("test"))
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap1_"))
+        sources = [Source(snap.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="snapshot",
+            sources=sources,
+            distribution="buster",
+            architectures=["amd64"],
+        )
+
+        snap_new = aptly.snapshot_create_from_repo(repo.name, rand("snap2_"))
+        sources_new = [Source(snap_new.name, "main")]
+        pub_new = pub._replace(sources=sources_new)
+        updated_pub = aptly.publish_update(pub_new)
+        assert updated_pub.prefix == "."
+        assert updated_pub.source_kind == "snapshot"
+        assert sorted(updated_pub.sources) == sorted(sources_new)
+
+    def test_publish_update_switch_snapshot_str_args(self, aptly: Aptly):
+        repo = aptly.repo_create(rand("test"))
+        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap1_"))
+        sources = [Source(snap.name, "main")]
+        pub = aptly.publish_create(
+            source_kind="snapshot",
+            sources=sources,
+            distribution="buster",
+            architectures=["amd64"],
+        )
+
+        snap_new = aptly.snapshot_create_from_repo(repo.name, rand("snap2_"))
+        sources_new = [Source(snap_new.name, "main")]
+        updated_pub = aptly.publish_update(
+            storage=pub.storage,
+            prefix=pub.prefix,
+            distribution=pub.distribution,
+            snapshots=sources_new,
+            acquire_by_hash=pub.acquire_by_hash,
+        )
+        assert updated_pub.prefix == "."
+        assert updated_pub.source_kind == "snapshot"
+        assert sorted(updated_pub.sources) == sorted(sources_new)
+
+    def test_package_show(self, aptly: Aptly, packages_simple: Sequence[Package]):
+        directory = rand("dir")
+        aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
+
+        repo = aptly.repo_create(rand("repo"))
+        aptly.repo_add_packages(repo.name, directory)
+
+        for pkg in packages_simple:
+            showed_pkg = aptly.package_show(pkg.key)
+            assert showed_pkg.fields == pkg.fields
+            assert showed_pkg == pkg._replace(file=None)
+
+    ###########################################################################################
+    @pytest.mark.skip
     def test_put(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repos = set()
         for _ in range(2):
@@ -314,11 +673,7 @@ class TestAptly:
         for repo in added:
             assert repo.packages == frozenset(packages_simple)
 
-    def test_put_no_repo(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
-        repos = [rand("test")]
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly.put(repos, [pkg.file.origpath for pkg in packages_simple])
-
+    @pytest.mark.skip
     def test_put_conflict_error(self, aptly: aptly_ctl.aptly.Aptly, packages_conflict):
         pkgs = [pkg.file.origpath for pkg in packages_conflict]
         repo = aptly.repo_create(rand("repo"))
@@ -331,6 +686,7 @@ class TestAptly:
         assert len(failed) == 1
         assert not errors
 
+    @pytest.mark.skip
     def test_put_force_replace(self, aptly: aptly_ctl.aptly.Aptly, packages_conflict):
         pkgs = [pkg.file.origpath for pkg in packages_conflict]
         repo = aptly.repo_create(rand("repo"))
@@ -343,40 +699,7 @@ class TestAptly:
         assert not failed
         assert not errors
 
-    def test_repo_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
-        repo = aptly.repo_create(rand("test"))
-        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
-        searched_repo = aptly._search(repo)
-        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
-        assert repo._replace(packages=expected_pkgs) == searched_repo
-
-    def test_repo_search_no_repo(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.RepoNotFoundError):
-            aptly._search(Repo(rand("test")))
-
-    def test_repo_search_bad_query(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly._search(repo, query="Name (")
-
-    def test_snapshot_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
-        repo = aptly.repo_create(rand("test"))
-        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
-        snapshot = aptly.snapshot_create_from_repo(repo.name, rand("test"))
-        searched_snapshot = aptly._search(snapshot)
-        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
-        assert snapshot._replace(packages=expected_pkgs) == searched_snapshot
-
-    def test_snapshot_search_no_snapshot(self, aptly: aptly_ctl.aptly.Aptly):
-        with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
-            aptly._search(Snapshot(rand("test")))
-
-    def test_snapshot_search_bad_query(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        snapshot = aptly.snapshot_create_from_repo(repo.name, rand("test"))
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly._search(snapshot, query="Name (")
-
+    @pytest.mark.skip
     def test_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
@@ -392,6 +715,7 @@ class TestAptly:
         assert len(errors) == 0
         assert set(result) == set(expected)
 
+    @pytest.mark.skip
     def test_search_no_snapshot_error(
         self, aptly: aptly_ctl.aptly.Aptly, packages_simple
     ):
@@ -408,6 +732,7 @@ class TestAptly:
         assert set(result) == set(expected)
         assert isinstance(errors[0], aptly_ctl.exceptions.SnapshotNotFoundError)
 
+    @pytest.mark.skip
     def test_remove(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
@@ -418,12 +743,14 @@ class TestAptly:
         remaining = aptly._search(repo)
         assert remaining == expected
 
+    @pytest.mark.skip
     def test_remove_fail(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
         repo = Repo("test", packages=frozenset(packages_simple))
         errors = aptly.remove(repo)
         assert len(errors) == 1
         assert isinstance(errors[0][1], aptly_ctl.exceptions.RepoNotFoundError)
 
+    @pytest.mark.skip
     def test_snapshot_create_from_snapshot(
         self, aptly: aptly_ctl.aptly.Aptly, packages_simple
     ):
@@ -435,214 +762,10 @@ class TestAptly:
         snap2 = aptly._search(snap2)
         assert snap2.packages == expected_pkgs
 
+    @pytest.mark.skip
     def test_snapshot_create_from_snapshot_no_source(
         self, aptly: aptly_ctl.aptly.Aptly
     ):
         snap = Snapshot(rand("snap"))
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
             aptly.snapshot_create_from_snapshots(rand("snap"), [snap])
-
-    def test_snapshot_create_from_snapshot_same_name_error(
-        self, aptly: aptly_ctl.aptly.Aptly
-    ):
-        snap_name = rand("snap")
-        repo = aptly.repo_create(rand("test"))
-        snap1 = aptly.snapshot_create_from_repo(repo.name, snap_name)
-        with pytest.raises(aptly_ctl.exceptions.InvalidOperationError):
-            aptly.snapshot_create_from_snapshots(snap_name, [snap1])
-
-    def test_snapshot_create_from_packages(
-        self, aptly: aptly_ctl.aptly.Aptly, packages_simple
-    ):
-        repo = aptly.repo_create(rand("test"))
-        expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
-        aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
-        snap = aptly.snapshot_create_from_packages(rand("snap"), packages_simple)
-        search_result = aptly._search(snap)
-        assert search_result.packages == expected_pkgs
-
-    def test_publish_create_from_local_repo(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        sources = [Source(repo, "main")]
-        pub_to_create = Publish.new(
-            sources, distribution="stretch", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-        assert pub.full_prefix == "."
-        assert pub.source_kind == "local"
-        assert pub.sources == frozenset(sources)
-        assert pub.distribution == "stretch"
-
-    def test_publish_create_from_snapshot(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
-        sources = [Source(snap._replace(description="", created_at=None), "main")]
-        pub_to_create = Publish.new(
-            sources, distribution="stretch", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-        assert pub.full_prefix == "."
-        assert pub.source_kind == "snapshot"
-        assert pub.sources == frozenset(sources)
-        assert pub.distribution == "stretch"
-
-    def test_publish_create_with_prefix(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        sources = [Source(repo, "main")]
-        pub_to_create = Publish.new(
-            sources, prefix="debian", distribution="stretch", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-        assert pub.full_prefix == "debian"
-        assert pub.source_kind == "local"
-        assert pub.sources == frozenset(sources)
-        assert pub.distribution == "stretch"
-
-    def test_publish_list(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        sources = [Source(repo, "main")]
-        pub_to_create = Publish.new(
-            sources, distribution="stretch", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-        pub_list = aptly.publish_list()
-        assert len(pub_list) == 1
-        assert pub_list[0] == pub
-
-    def test_publish_drop(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        sources = [Source(repo, "main")]
-        pub_to_create = Publish.new(
-            sources, distribution="stretch", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-        aptly.publish_drop(pub)
-        pub_list = aptly.publish_list()
-        assert len(pub_list) == 0
-
-    def test_publish_drop_str_args(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        sources = [Source(repo, "main")]
-        pub_to_create = Publish.new(
-            sources, distribution="stretch", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-        aptly.publish_drop(
-            storage=pub.storage, prefix=pub.prefix, distribution=pub.distribution
-        )
-        pub_list = aptly.publish_list()
-        assert len(pub_list) == 0
-
-    def test_publish_update_from_local_repo(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        sources = [Source(repo, "main")]
-        pub_to_create = Publish.new(
-            sources, distribution="buster", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-        updated_pub = aptly.publish_update(pub)
-        assert updated_pub.prefix == "."
-        assert updated_pub.source_kind == "local"
-        assert updated_pub.sources == frozenset(sources)
-
-    def test_publish_update_switch_snapshot(self, aptly: aptly_ctl.aptly.Aptly):
-        repo = aptly.repo_create(rand("test"))
-        snap = aptly.snapshot_create_from_repo(repo.name, rand("snap1_"))
-        sources = [Source(snap, "main")]
-        pub_to_create = Publish.new(
-            sources, distribution="buster", architectures=["amd64"]
-        )
-        pub = aptly.publish_create(pub_to_create)
-
-        snap_new = aptly.snapshot_create_from_repo(repo.name, rand("snap2_"))
-        sources_new = frozenset(
-            [Source(snap_new._replace(description="", created_at=None), "main")]
-        )
-        pub_new = pub._replace(sources=sources_new)
-        updated_pub = aptly.publish_update(pub_new)
-        assert updated_pub.prefix == "."
-        assert updated_pub.source_kind == "snapshot"
-        assert updated_pub.sources == sources_new
-
-
-class TestPublish:
-    def test_new(self):
-        sources_repos = [Source(Repo("repo1"), "comp1"), Source(Repo("repo2"), "comp2")]
-        sources_snaps = [
-            Source(Snapshot("snap1"), "comp1"),
-            Source(Snapshot("snap1"), "comp2"),
-        ]
-        p_repos = Publish.new(sources_repos)
-        p_snaps = Publish.new(sources_snaps)
-        assert p_repos.source_kind == "local"
-        assert p_snaps.source_kind == "snapshot"
-        assert p_repos.sources == frozenset(sources_repos)
-        assert p_snaps.sources == frozenset(sources_snaps)
-        for p in [p_repos, p_snaps]:
-            assert p.storage == ""
-            assert p.prefix == ""
-            assert p.distribution == ""
-            assert p.full_prefix == "."
-            assert p.full_prefix_escaped == ":."
-
-    def test_new_prefix(self):
-        sources = [Source(Repo("repo1"))]
-        for storage, prefix, full, escaped in [
-            (None, None, ".", ":."),
-            (None, "debian", "debian", "debian"),
-            ("s3", "debian", "s3:debian", "s3:debian"),
-            ("s3", "pkg/debian_new", "s3:pkg/debian_new", "s3:pkg_debian__new"),
-        ]:
-            p = Publish.new(sources, storage=storage, prefix=prefix)
-            assert p.full_prefix == full
-            assert p.full_prefix_escaped == escaped
-
-    def test_new_mixed_sources_error(self):
-        sources = [Source(Repo("repo"), "comp1"), Source(Snapshot("snap"), "comp2")]
-        with pytest.raises(ValueError):
-            Publish.new(sources)
-
-    def test_new_invalid_source_error(self):
-        sources = [Source("repo", "comp1")]
-        with pytest.raises(ValueError):
-            Publish.new(sources)
-
-    def test_new_empty_sources_error(self):
-        with pytest.raises(ValueError):
-            Publish.new([])
-
-    def test_new_invalid_prefix_error(self):
-        sources = [Source(Repo("repo1"))]
-        with pytest.raises(ValueError):
-            Publish.new(sources, prefix="s3:debian")
-
-    def test_api_params(self):
-        repo = Repo("repo1")
-        sources = [Source(repo, "main")]
-        p = Publish.new(
-            sources,
-            storage="s3",
-            prefix="debian",
-            distribution="buster",
-            architectures=["amd64"],
-            label="label",
-            origin="origin",
-            not_automatic="yes",
-            but_automatic_upgrades=True,
-            acquire_by_hash=True,
-        )
-        params = p.api_params
-        assert params == {
-            "SourceKind": "local",
-            "Sources": [{"Name": repo.name, "Component": "main"}],
-            "Distribution": "buster",
-            "Architectures": ["amd64"],
-            "Label": "label",
-            "Origin": "origin",
-            "NotAutomatic": "yes",
-            "ButAutomaticUpgrades": "yes",
-            "AcquireByHash": True,
-        }
-
-    def test_from_api_response(self):
-        pass

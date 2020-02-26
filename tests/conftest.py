@@ -9,15 +9,17 @@ def no_requests(monkeypatch):
     monkeypatch.delattr("requests.sessions.Session.request")
 
 
+def _packages(directory: str):
+    pkgs_dir = os.path.realpath(directory)
+    pkgs = (os.path.join(pkgs_dir, pkg) for pkg in os.listdir(pkgs_dir))
+    return [Package.from_file(pkg) for pkg in pkgs]
+
+
 @pytest.fixture
 def packages_simple():
-    pkgs_dir = os.path.realpath("tests/packages/simple")
-    pkgs = (os.path.join(pkgs_dir, pkg) for pkg in os.listdir(pkgs_dir))
-    return frozenset(Package.from_file(pkg) for pkg in pkgs)
+    return _packages("tests/packages/simple")
 
 
 @pytest.fixture
 def packages_conflict():
-    pkgs_dir = os.path.realpath("tests/packages/conflict")
-    pkgs = (os.path.join(pkgs_dir, pkg) for pkg in os.listdir(pkgs_dir))
-    return frozenset(Package.from_file(pkg) for pkg in pkgs)
+    return _packages("tests/packages/conflict")

@@ -3,65 +3,10 @@ import typing
 import http
 import logging
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
-class AptlyCtlError(Exception):
-    """Base class for exceptions in aptly_ctl module."""
-
-    pass
-
-
-class NotFoundError(AptlyCtlError):
-    """
-    Exception raised for errors in operations on entities that does not exist.
-
-    Attributes:
-        name -- name of an entity that was not found
-    """
-
-    entity_name = ""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-    def __str__(self) -> str:
-        return (
-            "{} '{}' not found".format(self.entity_name, self.name)
-            .capitalize()
-            .lstrip()
-        )
-
-
-class RepoNotFoundError(NotFoundError):
-    entity_name = "local repo"
-
-
-class SnapshotNotFoundError(NotFoundError):
-    entity_name = "snapshot"
-
-
-class PackageNotFoundError(NotFoundError):
-    entity_name = "package"
-
-
-class InvalidOperationError(AptlyCtlError):
-    """
-    Exception raised for errors in operations that connot be performed
-    because of some conflicts that user must resolve
-
-    Attributes:
-        description -- of invalid operation
-    """
-
-    def __init__(self, description: str) -> None:
-        self.description = description
-
-    def __str__(self) -> str:
-        return "Invalid operation: {}".format(self.description)
-
-
-class AptlyApiError(AptlyCtlError):
+class AptlyApiError(Exception):
     """
     Exception for aptly API errors
     """
@@ -92,9 +37,7 @@ class AptlyApiError(AptlyCtlError):
         try:
             resp_data = json.loads(self.msg)
         except json.JSONDecodeError as exc:
-            logger.warning(
-                "Can't decode json from error responce '%s': %s", self.msg, exc
-            )
+            log.warning("Can't decode json from error responce '%s': %s", self.msg, exc)
             return
 
         if isinstance(resp_data, dict):
@@ -103,7 +46,7 @@ class AptlyApiError(AptlyCtlError):
         errors = []
         for msg in resp_data:
             if not isinstance(msg, dict) or "error" not in msg:
-                logger.warning("Unexpected json in error responce: %s", self.msg)
+                log.warning("Unexpected json in error responce: %s", self.msg)
                 return
             errors.append((msg["error"], msg.get("meta", "")))
 

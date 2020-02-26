@@ -12,7 +12,7 @@ from typing import (
 )
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def read_control_file_lines(package_path: str) -> Iterator[str]:
@@ -45,6 +45,12 @@ def get_control_file_fields(package_file: str) -> Dict[str, str]:
                 continue
             break
         if line[0].isspace():
+            # control file lines from read_control_file_lines are stripped.
+            # Add newline to the first line of multiline field
+            if not fields[last_field].endswith("\n"):
+                # https://github.com/aptly-dev/aptly/blob/37166af321bc30031f5abd7e85ea473fa807d98f/deb/format.go#L291
+                # aptly does not strip leading space from the first line of multiline fields
+                fields[last_field] = " " + fields[last_field] + "\n"
             fields[last_field] += line + "\n"
         else:
             last_field, _, value = line.partition(":")
