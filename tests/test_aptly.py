@@ -4,7 +4,7 @@ from typing import Iterator, Sequence
 import os.path
 import aptly_ctl.aptly
 from datetime import datetime
-from aptly_ctl.aptly import Aptly
+from aptly_ctl.aptly import Client
 from aptly_ctl.aptly import Repo, Snapshot, Source, Package, PackageFileInfo
 from aptly_ctl.exceptions import AptlyApiError
 from aptly_ctl.debian import Version
@@ -105,16 +105,16 @@ class TestPackage:
         assert pkg.fields == expected_fields
 
 
-class TestAptly:
+class TestAptlyClient:
     @pytest.fixture
-    def aptly(self) -> Iterator[aptly_ctl.aptly.Aptly]:
+    def aptly(self) -> Iterator[aptly_ctl.aptly.Client]:
         url = "http://localhost:8090/"
         sig_cfg = aptly_ctl.aptly.SigningConfig(
             skip=False,
             gpgkey="DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0",
             passphrase_file="/home/aptly/gpg_pass",
         )
-        aptly = aptly_ctl.aptly.Aptly(url, default_signing_config=sig_cfg)
+        aptly = aptly_ctl.aptly.Client(url, default_signing_config=sig_cfg)
         yield aptly
         for publish in aptly.publish_list():
             aptly.publish_drop(publish, force=True)
@@ -125,7 +125,7 @@ class TestAptly:
         for d in aptly.files_list_dirs():
             aptly.files_delete_dir(d)
 
-    def test_files_upload(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_files_upload(self, aptly: Client, packages_simple: Sequence[Package]):
         files = [pkg.file.origpath for pkg in packages_simple]
         directory = rand("dir")
         resp = aptly.files_upload(files, directory)
@@ -133,20 +133,20 @@ class TestAptly:
             os.path.join(directory, pkg.file.filename) for pkg in packages_simple
         )
 
-    def test_files_list_dirs(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_files_list_dirs(self, aptly: Client, packages_simple: Sequence[Package]):
         files = [pkg.file.origpath for pkg in packages_simple]
         directory = rand("dir")
         aptly.files_upload(files, directory)
         assert [directory] == aptly.files_list_dirs()
 
-    def test_files_list(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_files_list(self, aptly: Client, packages_simple: Sequence[Package]):
         files = [pkg.file.origpath for pkg in packages_simple]
         directory = rand("dir")
         aptly.files_upload(files, directory)
         resp = aptly.files_list(directory)
         assert set(resp) == set(pkg.file.filename for pkg in packages_simple)
 
-    def test_files_delete_file(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_files_delete_file(self, aptly: Client, packages_simple: Sequence[Package]):
         files = [pkg.file.origpath for pkg in packages_simple]
         deleted_file = os.path.basename(files[0])
         directory = rand("dir")
@@ -154,14 +154,14 @@ class TestAptly:
         aptly.files_delete_file(directory, deleted_file)
         assert deleted_file not in aptly.files_list(directory)
 
-    def test_files_delete_dir(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_files_delete_dir(self, aptly: Client, packages_simple: Sequence[Package]):
         files = [pkg.file.origpath for pkg in packages_simple]
         directory = rand("dir")
         aptly.files_upload(files, directory)
         aptly.files_delete_dir(directory)
         assert directory not in aptly.files_list_dirs()
 
-    def test_repo_create_and_show(self, aptly: Aptly):
+    def test_repo_create_and_show(self, aptly: Client):
         for kwargs in [
             {"name": rand("test")},
             {"name": rand("test"), "comment": "comment"},
@@ -181,7 +181,7 @@ class TestAptly:
             assert aptly.repo_create(**kwargs) == repo
             assert aptly.repo_show(kwargs["name"]) == repo
 
-    def test_repo_list(self, aptly: Aptly):
+    def test_repo_list(self, aptly: Client):
         repos = set()
         assert not aptly.repo_list()
         repos.add(aptly.repo_create(rand("test")))
@@ -189,13 +189,13 @@ class TestAptly:
         repos.add(aptly.repo_create(rand("test"), "comment"))
         assert set(aptly.repo_list()) == repos
 
-    def test_repo_edit(self, aptly: Aptly):
+    def test_repo_edit(self, aptly: Client):
         src = Repo(rand("repo"))
         tgt = src._replace(comment="comment")
         assert aptly.repo_create(src.name) == src
         assert aptly.repo_edit(tgt.name, tgt.comment) == tgt
 
-    def test_repo_delete(self, aptly: aptly_ctl.aptly.Aptly):
+    def test_repo_delete(self, aptly: Aptly):
         name = rand("test")
         aptly.repo_create(name)
         aptly.repo_show(name)
@@ -203,14 +203,14 @@ class TestAptly:
         with pytest.raises(AptlyApiError, match=r"local repo.*not found"):
             aptly.repo_show(name)
 
-    def test_repo_delete_force(self, aptly: Aptly):
+    def test_repo_delete_force(self, aptly: Client):
         repo = aptly.repo_create(rand("repo"))
         aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         with pytest.raises(AptlyApiError, match="unable to drop.*has snapshots"):
             aptly.repo_delete(repo.name)
         aptly.repo_delete(repo.name, True)
 
-    def test_repo_add_packages(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_repo_add_packages(self, aptly: Client, packages_simple: Sequence[Package]):
         files = [pkg.file.origpath for pkg in packages_simple]
         directory = rand("dir")
         aptly.files_upload(files, directory)
@@ -222,7 +222,7 @@ class TestAptly:
         assert set(report.added) == set(pkg.dir_ref for pkg in packages_simple)
 
     def test_repo_add_packages_one_file(
-        self, aptly: Aptly, packages_simple: Sequence[Package]
+        self, aptly: Client, packages_simple: Sequence[Package]
     ):
         pkg = list(packages_simple)[0]
         directory = rand("dir")
@@ -236,7 +236,7 @@ class TestAptly:
         assert report.added[0] == pkg.dir_ref
 
     def test_repo_add_packages_conflict(
-        self, aptly: Aptly, packages_conflict: Sequence[Package]
+        self, aptly: Client, packages_conflict: Sequence[Package]
     ):
         assert len(packages_conflict) == 2
         pkgs = list(packages_conflict)
@@ -253,7 +253,7 @@ class TestAptly:
         assert not report.added
 
     def test_repo_add_packages_conflict_force_replace(
-        self, aptly: Aptly, packages_conflict: Sequence[Package]
+        self, aptly: Client, packages_conflict: Sequence[Package]
     ):
         assert len(packages_conflict) == 2
         pkgs = list(packages_conflict)
@@ -271,7 +271,7 @@ class TestAptly:
         assert len(report.added) == 1
         assert report.added[0] == pkgs[1].dir_ref
 
-    def test_repo_search(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_repo_search(self, aptly: Client, packages_simple: Sequence[Package]):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
 
@@ -285,7 +285,7 @@ class TestAptly:
         assert sorted(expected_pkgs) == sorted(found_pkgs)
 
     def test_repo_search_details(
-        self, aptly: Aptly, packages_simple: Sequence[Package]
+        self, aptly: Client, packages_simple: Sequence[Package]
     ):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
@@ -303,7 +303,7 @@ class TestAptly:
             assert found_pkg == expexted_pkg
 
     def test_repo_search_with_query(
-        self, aptly: Aptly, packages_simple: Sequence[Package]
+        self, aptly: Client, packages_simple: Sequence[Package]
     ):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
@@ -320,7 +320,7 @@ class TestAptly:
         assert sorted(expected_pkgs) == sorted(found_pkgs)
 
     def test_repo_add_packages_by_key(
-        self, aptly: Aptly, packages_simple: Sequence[Package]
+        self, aptly: Client, packages_simple: Sequence[Package]
     ):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
@@ -341,7 +341,7 @@ class TestAptly:
         assert sorted(expected_pkgs) == sorted(found_pkgs)
 
     def test_repo_add_packages_by_key_conflict(
-        self, aptly: Aptly, packages_conflict: Sequence[Package]
+        self, aptly: Client, packages_conflict: Sequence[Package]
     ):
         assert len(packages_conflict) == 2
         directory = rand("dir")
@@ -367,7 +367,7 @@ class TestAptly:
         assert not found_pkgs
 
     def test_repo_delete_packages_by_key(
-        self, aptly: Aptly, packages_simple: Sequence[Package]
+        self, aptly: Client, packages_simple: Sequence[Package]
     ):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
@@ -383,7 +383,7 @@ class TestAptly:
         found_pkgs = aptly.repo_search(repo.name)
         assert not found_pkgs
 
-    def test_snapshot_create_from_repo(self, aptly: Aptly):
+    def test_snapshot_create_from_repo(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         snap_name = rand("snap")
         snap = aptly.snapshot_create_from_repo(repo.name, snap_name, "test description")
@@ -392,7 +392,7 @@ class TestAptly:
         assert isinstance(snap.created_at, datetime)
 
     def test_snapshot_create_from_package_keys(
-        self, aptly: Aptly, packages_simple: Sequence[Package]
+        self, aptly: Client, packages_simple: Sequence[Package]
     ):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
@@ -412,17 +412,17 @@ class TestAptly:
         ]
         assert sorted(found_pkgs) == sorted(expected_pkgs)
 
-    def test_snapshot_show(self, aptly: Aptly):
+    def test_snapshot_show(self, aptly: Client):
         snap = aptly.snapshot_create_from_package_keys(rand("snap"), [])
         assert snap == aptly.snapshot_show(snap.name)
 
-    def test_snapshot_list(self, aptly: Aptly):
+    def test_snapshot_list(self, aptly: Client):
         snaps = []
         for _ in range(5):
             snaps.append(aptly.snapshot_create_from_package_keys(rand("snap"), []))
         assert sorted(snaps) == sorted(aptly.snapshot_list())
 
-    def test_snapshot_edit(self, aptly: Aptly):
+    def test_snapshot_edit(self, aptly: Client):
         snap = aptly.snapshot_create_from_package_keys(rand("snap"), [])
         modified_snap = aptly.snapshot_edit(snap.name)
         assert modified_snap == snap
@@ -434,13 +434,13 @@ class TestAptly:
         assert modified_snap.name == new_name
         assert aptly.snapshot_show(modified_snap.name).name == new_name
 
-    def test_snapshot_delete(self, aptly: Aptly):
+    def test_snapshot_delete(self, aptly: Client):
         snap = aptly.snapshot_create_from_package_keys(rand("snap"), [])
         aptly.snapshot_delete(snap.name)
         with pytest.raises(AptlyApiError, match="snapshot.*not found"):
             aptly.snapshot_show(snap.name)
 
-    def test_snapshot_delete_force(self, aptly: Aptly):
+    def test_snapshot_delete_force(self, aptly: Client):
         snap1 = aptly.snapshot_create_from_package_keys(rand("snap"), [])
         aptly.snapshot_create_from_package_keys(
             rand("snap"), [], source_snapshots=[snap1.name]
@@ -452,7 +452,7 @@ class TestAptly:
             aptly.snapshot_delete(snap1.name)
         aptly.snapshot_delete(snap1.name, True)
 
-    def test_snapshot_search(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_snapshot_search(self, aptly: Client, packages_simple: Sequence[Package]):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
 
@@ -467,7 +467,7 @@ class TestAptly:
         found_pkgs = aptly.snapshot_search(snap.name)
         assert sorted(expected_pkgs) == sorted(found_pkgs)
 
-    def test_snapshot_diff(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_snapshot_diff(self, aptly: Client, packages_simple: Sequence[Package]):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
 
@@ -483,7 +483,7 @@ class TestAptly:
         ]
         assert sorted([line[1] for line in diff]) == sorted(expected_pkgs)
 
-    def test_publish_create_from_local_repo(self, aptly: Aptly):
+    def test_publish_create_from_local_repo(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         sources = [Source(repo.name, "main")]
         pub = aptly.publish_create(
@@ -497,7 +497,7 @@ class TestAptly:
         assert sorted(pub.sources) == sorted(sources)
         assert pub.distribution == "stretch"
 
-    def test_publish_create_from_snapshot(self, aptly: Aptly):
+    def test_publish_create_from_snapshot(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         snap = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
         sources = [Source(snap.name, "main")]
@@ -512,7 +512,7 @@ class TestAptly:
         assert sorted(pub.sources) == sorted(sources)
         assert pub.distribution == "stretch"
 
-    def test_publish_create_with_prefix(self, aptly: Aptly):
+    def test_publish_create_with_prefix(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         sources = [Source(repo.name, "main")]
         pub = aptly.publish_create(
@@ -527,7 +527,7 @@ class TestAptly:
         assert sorted(pub.sources) == sorted(sources)
         assert pub.distribution == "stretch"
 
-    def test_publish_list(self, aptly: Aptly):
+    def test_publish_list(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         sources = [Source(repo.name, "main")]
         pub = aptly.publish_create(
@@ -540,7 +540,7 @@ class TestAptly:
         assert len(pub_list) == 1
         assert pub_list[0] == pub
 
-    def test_publish_drop(self, aptly: Aptly):
+    def test_publish_drop(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         sources = [Source(repo.name, "main")]
         pub = aptly.publish_create(
@@ -553,7 +553,7 @@ class TestAptly:
         pub_list = aptly.publish_list()
         assert len(pub_list) == 0
 
-    def test_publish_drop_str_args(self, aptly: Aptly):
+    def test_publish_drop_str_args(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         sources = [Source(repo.name, "main")]
         pub = aptly.publish_create(
@@ -568,7 +568,7 @@ class TestAptly:
         pub_list = aptly.publish_list()
         assert len(pub_list) == 0
 
-    def test_publish_update_from_local_repo(self, aptly: Aptly):
+    def test_publish_update_from_local_repo(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         sources = [Source(repo.name, "main")]
         pub = aptly.publish_create(
@@ -582,7 +582,7 @@ class TestAptly:
         assert updated_pub.source_kind == "local"
         assert sorted(updated_pub.sources) == sorted(sources)
 
-    def test_publish_update_from_local_repo_str_args(self, aptly: Aptly):
+    def test_publish_update_from_local_repo_str_args(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         sources = [Source(repo.name, "main")]
         pub = aptly.publish_create(
@@ -601,7 +601,7 @@ class TestAptly:
         assert updated_pub.source_kind == "local"
         assert sorted(updated_pub.sources) == sorted(sources)
 
-    def test_publish_update_switch_snapshot(self, aptly: Aptly):
+    def test_publish_update_switch_snapshot(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         snap = aptly.snapshot_create_from_repo(repo.name, rand("snap1_"))
         sources = [Source(snap.name, "main")]
@@ -620,7 +620,7 @@ class TestAptly:
         assert updated_pub.source_kind == "snapshot"
         assert sorted(updated_pub.sources) == sorted(sources_new)
 
-    def test_publish_update_switch_snapshot_str_args(self, aptly: Aptly):
+    def test_publish_update_switch_snapshot_str_args(self, aptly: Client):
         repo = aptly.repo_create(rand("test"))
         snap = aptly.snapshot_create_from_repo(repo.name, rand("snap1_"))
         sources = [Source(snap.name, "main")]
@@ -644,7 +644,7 @@ class TestAptly:
         assert updated_pub.source_kind == "snapshot"
         assert sorted(updated_pub.sources) == sorted(sources_new)
 
-    def test_package_show(self, aptly: Aptly, packages_simple: Sequence[Package]):
+    def test_package_show(self, aptly: Client, packages_simple: Sequence[Package]):
         directory = rand("dir")
         aptly.files_upload([pkg.file.origpath for pkg in packages_simple], directory)
 
@@ -656,13 +656,13 @@ class TestAptly:
             assert showed_pkg.fields == pkg.fields
             assert showed_pkg == pkg._replace(file=None)
 
-    def test_version(self, aptly: Aptly):
+    def test_version(self, aptly: Client):
         version = aptly.version()
         assert isinstance(version, str)
 
     ###########################################################################################
     @pytest.mark.skip
-    def test_put(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
+    def test_put(self, aptly: Client, packages_simple):
         repos = set()
         for _ in range(2):
             repos.add(aptly.repo_create(rand("test")))
@@ -678,7 +678,7 @@ class TestAptly:
             assert repo.packages == frozenset(packages_simple)
 
     @pytest.mark.skip
-    def test_put_conflict_error(self, aptly: aptly_ctl.aptly.Aptly, packages_conflict):
+    def test_put_conflict_error(self, aptly: Client, packages_conflict):
         pkgs = [pkg.file.origpath for pkg in packages_conflict]
         repo = aptly.repo_create(rand("repo"))
         added, failed, errors = aptly.put([repo.name], pkgs[:1])
@@ -691,7 +691,7 @@ class TestAptly:
         assert not errors
 
     @pytest.mark.skip
-    def test_put_force_replace(self, aptly: aptly_ctl.aptly.Aptly, packages_conflict):
+    def test_put_force_replace(self, aptly: Client, packages_conflict):
         pkgs = [pkg.file.origpath for pkg in packages_conflict]
         repo = aptly.repo_create(rand("repo"))
         added, failed, errors = aptly.put([repo.name], pkgs[:1])
@@ -704,7 +704,7 @@ class TestAptly:
         assert not errors
 
     @pytest.mark.skip
-    def test_search(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
+    def test_search(self, aptly: Client, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
         snapshot = aptly.snapshot_create_from_repo(repo.name, rand("test"))
@@ -720,9 +720,7 @@ class TestAptly:
         assert set(result) == set(expected)
 
     @pytest.mark.skip
-    def test_search_no_snapshot_error(
-        self, aptly: aptly_ctl.aptly.Aptly, packages_simple
-    ):
+    def test_search_no_snapshot_error(self, aptly: Client, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
@@ -737,7 +735,7 @@ class TestAptly:
         assert isinstance(errors[0], aptly_ctl.exceptions.SnapshotNotFoundError)
 
     @pytest.mark.skip
-    def test_remove(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
+    def test_remove(self, aptly: Client, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
         expected = aptly._search(repo, query="!aptly")
@@ -748,16 +746,14 @@ class TestAptly:
         assert remaining == expected
 
     @pytest.mark.skip
-    def test_remove_fail(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):
+    def test_remove_fail(self, aptly: Client, packages_simple):
         repo = Repo("test", packages=frozenset(packages_simple))
         errors = aptly.remove(repo)
         assert len(errors) == 1
         assert isinstance(errors[0][1], aptly_ctl.exceptions.RepoNotFoundError)
 
     @pytest.mark.skip
-    def test_snapshot_create_from_snapshot(
-        self, aptly: aptly_ctl.aptly.Aptly, packages_simple
-    ):
+    def test_snapshot_create_from_snapshot(self, aptly: Client, packages_simple):
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
@@ -767,9 +763,7 @@ class TestAptly:
         assert snap2.packages == expected_pkgs
 
     @pytest.mark.skip
-    def test_snapshot_create_from_snapshot_no_source(
-        self, aptly: aptly_ctl.aptly.Aptly
-    ):
+    def test_snapshot_create_from_snapshot_no_source(self, aptly: Client):
         snap = Snapshot(rand("snap"))
         with pytest.raises(aptly_ctl.exceptions.SnapshotNotFoundError):
             aptly.snapshot_create_from_snapshots(rand("snap"), [snap])

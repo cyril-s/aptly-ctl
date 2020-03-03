@@ -21,7 +21,7 @@ setup(
     url="https://github.com/cyril-s/aptly-ctl",
     install_requires=["aptly-api-client", "PyYAML", "requests", "fnvhash", "unix-ar"],
     python_requires=">=3",
-    entry_points={"console_scripts": ["aptly-ctl = aptly_ctl.application:main"]},
+    entry_points={"console_scripts": ["aptly-ctl = aptly_ctl.cmd:main"]},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 3 :: Only",

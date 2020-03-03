@@ -316,7 +316,7 @@ class FilesReport(NamedTuple):
     warnings: Sequence[str] = ()
 
 
-class Aptly:
+class Client:
     """Aptly API client with more convenient commands"""
 
     files_url_path: ClassVar[str] = "api/files"

@@ -1,2 +1,3 @@
-from aptly_ctl.application import main
+from aptly_ctl.cmd import main
+
 main()
