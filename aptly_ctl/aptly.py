@@ -843,7 +843,7 @@ class Aptly:
         pub_data = cast(Dict[str, Any], pub_data)
         return Publish.from_api_response(pub_data)
 
-    def package_show(self, key: str):
+    def package_show(self, key: str) -> Package:
         pkg_data = self._request("GET", urljoin(self.url, self.packages_url_path, key))
         pkg_data = cast(Dict[str, str], pkg_data)
         return Package.from_api_response(pkg_data)
