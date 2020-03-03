@@ -656,6 +656,10 @@ class TestAptly:
             assert showed_pkg.fields == pkg.fields
             assert showed_pkg == pkg._replace(file=None)
 
+    def test_version(self, aptly: Aptly):
+        version = aptly.version()
+        assert isinstance(version, str)
+
     ###########################################################################################
     @pytest.mark.skip
     def test_put(self, aptly: aptly_ctl.aptly.Aptly, packages_simple):

@@ -848,6 +848,11 @@ class Aptly:
         pkg_data = cast(Dict[str, str], pkg_data)
         return Package.from_api_response(pkg_data)
 
+    def version(self) -> str:
+        version_data = self._request("GET", urljoin(self.url, "api/version"))
+        version_data = cast(Dict[str, str], version_data)
+        return version_data["Version"]
+
 
 #    def _search_(
 #        self,
