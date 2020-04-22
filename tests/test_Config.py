@@ -67,6 +67,22 @@ class TestConfig:
                         "passphrase": "jessie"
                     }
                 }
+            },
+            {
+                "name": "with_empty_passphrase",
+                "url": "http://somehost:8090/api",
+                "signing": {
+                    "gpgkey": "foobar",
+                    "passphrase": ""
+                },
+            },
+            {
+                "name": "with_empty_passphrase_file",
+                "url": "http://somehost:8090/api",
+                "signing": {
+                    "gpgkey": "foobar",
+                    "passphrase": ""
+                },
             }
         ]
     }

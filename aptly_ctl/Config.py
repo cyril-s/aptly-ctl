@@ -36,7 +36,7 @@ class SigningConfig:
                     "Config must contain 'gpgkey'. Do not rely on default key."
                 )
             if (passphrase and passphrase_file) or (
-                not passphrase and not passphrase_file
+                passphrase is None and passphrase_file is None
             ):
                 raise AptlyCtlError(
                     "Config must contain either 'passphrase' or 'passphrase_file'."
