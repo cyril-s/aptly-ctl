@@ -7,6 +7,7 @@ import hashlib
 import fnvhash  # type: ignore
 from datetime import datetime
 import dateutil.parser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import (
     Any,
     ClassVar,
@@ -852,6 +853,47 @@ class Client:
         version_data = self._request("GET", urljoin(self.url, "api/version"))
         version_data = cast(Dict[str, str], version_data)
         return version_data["Version"]
+
+
+def search(
+    aptly: Client,
+    queries: Iterable[str] = (""),
+    with_deps: bool = False,
+    details: bool = False,
+    max_workers: int = 5,
+) -> Tuple[List[Tuple[Union[Repo, Snapshot], List[Package]]], List[AptlyApiError]]:
+    repos = aptly.repo_list()
+    snapshots = aptly.snapshot_list()
+    tasks = [(store, query) for store in repos + snapshots for query in queries]
+
+    def worker(
+        store: Union[Repo, Snapshot], query: str
+    ) -> Tuple[Union[Repo, Snapshot], List[Package]]:
+        if isinstance(store, Repo):
+            return store, aptly.repo_search(store.name, query, with_deps, details)
+        if isinstance(store, Snapshot):
+            return store, aptly.snapshot_search(store.name, query, with_deps, details)
+        raise TypeError("Invalid store type of {}: {}".format(store, type(store)))
+
+    futures = []
+    result = []
+    errors = []
+    with ThreadPoolExecutor(max_workers=max_workers) as exe:
+        try:
+            for task in tasks:
+                futures.append(exe.submit(worker, *task))
+            for future in as_completed(futures, 300):
+                try:
+                    store, packages = future.result()
+                    if packages:
+                        result.append((store, packages))
+                except AptlyApiError as exc:
+                    errors.append(exc)
+        except KeyboardInterrupt:
+            log.warning("Received SIGINT. Trying to abort requests...")
+            for future in futures:
+                future.cancel()
+    return result, errors
 
 
 #    def _search_(

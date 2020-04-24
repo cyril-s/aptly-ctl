@@ -1,11 +1,15 @@
 import argparse
 import logging
-from typing import Any
+from typing import Iterable, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from aptly_ctl import VERSION
-from aptly_ctl.aptly import Client
+from aptly_ctl.aptly import Client, Repo, Snapshot, search
 from aptly_ctl.config import Config, parse_override_dict
+from aptly_ctl.exceptions import AptlyApiError
 
 log = logging.getLogger(__name__)
+
+PACKAGE_QUERY_DOC_URL = "https://www.aptly.info/doc/feature/query/"
 
 
 def main() -> None:
@@ -37,13 +41,53 @@ def main() -> None:
         action="append",
         default=[],
         dest="config_keys",
-        help="provide value for configuration KEY. Takes precedence over config file. Use dots to set nested fields e.g. signing.gpgkey=somekey",
+        help="""
+        provide value for configuration KEY.
+        Takes precedence over config file.
+        Use dots to set nested fields e.g. signing.gpgkey=somekey
+        """,
     )
 
-    subparsers = parser.add_subparsers(dest="subcommand")
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=5,
+        help="number of worker threads for concurrent requests",
+    )
 
-    version_parser = subparsers.add_parser("version", help="show aptly server version")
-    version_parser.set_defaults(func=version)
+    subcommands = parser.add_subparsers(dest="subcommand")
+
+    version_subcommand = subcommands.add_parser(
+        "version", help="show aptly server version"
+    )
+    version_subcommand.set_defaults(func=version)
+
+    package_subcommand = subcommands.add_parser(
+        "package", help="search packages and show info about them"
+    )
+    package_actions = package_subcommand.add_subparsers(dest="action")
+
+    package_show_action = package_actions.add_parser("show", help="show package info")
+    package_show_action.set_defaults(func=package_show)
+    package_show_action.add_argument(
+        "query", help="package query. For query syntax see " + PACKAGE_QUERY_DOC_URL,
+    )
+
+    package_search_action = package_actions.add_parser("search", help="search packages")
+    package_search_action.set_defaults(func=package_search)
+    package_search_action.add_argument(
+        "queries",
+        metavar="[ query ... ]",
+        nargs="*",
+        help="package queries. Multiple queries are ORed. For query syntax see "
+        + PACKAGE_QUERY_DOC_URL,
+    )
+    package_search_action.add_argument(
+        "--with-deps",
+        action="store_true",
+        help="include dependencies when evaluating package query",
+    )
+    package_search_action.add_argument("--format", dest="fmt", help="output format")
 
     args = parser.parse_args()
 
@@ -80,5 +124,28 @@ def main() -> None:
     args.func(aptly, **vars(args))
 
 
-def version(aptly: Client, **other_args: Any) -> None:
+def version(aptly: Client, **kwargs: Any) -> None:
     print(aptly.version())
+
+
+def package_show(aptly: Client, query: str, **kwargs: Any) -> None:
+    print(aptly.package_show(key))
+
+
+def package_search(
+    aptly: Client,
+    queries: Iterable[str],
+    with_deps: bool,
+    fmt: str,
+    max_workers: int,
+    **kwargs: Any
+) -> None:
+    fmt = "{s.name} {p.key}"
+    if not queries:
+        queries = ("",)
+    result, errors = search(aptly, queries, max_workers=max_workers)
+    for store, packages in result:
+        for package in packages:
+            print(fmt.format(s=store, p=package))
+    for error in errors:
+        log.error(error)
