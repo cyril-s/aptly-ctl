@@ -23,3 +23,33 @@ def packages_simple():
 @pytest.fixture
 def packages_conflict():
     return _packages("tests/packages/conflict")
+
+
+def pytest_addoption(parser):
+    parser.addini("aptly_url", help="Aptly URL for integration tests")
+    parser.addini("aptly_gpgkey", help="Aptly GPG key for integration tests")
+    parser.addini(
+        "aptly_passphrase_file", help="Aptly passphrase file path for integration tests"
+    )
+
+
+def _get_ini_or_fail(name, pytestconfig):
+    value = pytestconfig.getini(name)
+    if not value:
+        pytest.fail(name + " is not set!")
+    return value
+
+
+@pytest.fixture
+def aptly_url(pytestconfig):
+    return _get_ini_or_fail("aptly_url", pytestconfig)
+
+
+@pytest.fixture
+def aptly_gpgkey(pytestconfig):
+    return _get_ini_or_fail("aptly_gpgkey", pytestconfig)
+
+
+@pytest.fixture
+def aptly_passphrase_file(pytestconfig):
+    return _get_ini_or_fail("aptly_passphrase_file", pytestconfig)

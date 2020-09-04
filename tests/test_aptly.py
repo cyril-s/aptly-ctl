@@ -107,14 +107,15 @@ class TestPackage:
 
 class TestAptlyClient:
     @pytest.fixture
-    def aptly(self) -> Iterator[aptly_ctl.aptly.Client]:
-        url = "http://localhost:8090/"
+    def aptly(
+        self, aptly_url, aptly_gpgkey, aptly_passphrase_file
+    ) -> Iterator[aptly_ctl.aptly.Client]:
         sig_cfg = aptly_ctl.aptly.SigningConfig(
             skip=False,
-            gpgkey="DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0",
-            passphrase_file="/home/aptly/gpg_pass",
+            gpgkey=aptly_gpgkey,
+            passphrase_file=aptly_passphrase_file,
         )
-        aptly = aptly_ctl.aptly.Client(url, default_signing_config=sig_cfg)
+        aptly = aptly_ctl.aptly.Client(aptly_url, default_signing_config=sig_cfg)
         yield aptly
         for publish in aptly.publish_list():
             aptly.publish_drop(publish, force=True)
@@ -195,7 +196,7 @@ class TestAptlyClient:
         assert aptly.repo_create(src.name) == src
         assert aptly.repo_edit(tgt.name, tgt.comment) == tgt
 
-    def test_repo_delete(self, aptly: Aptly):
+    def test_repo_delete(self, aptly: Client):
         name = rand("test")
         aptly.repo_create(name)
         aptly.repo_show(name)
@@ -757,7 +758,10 @@ class TestAptlyClient:
         repo = aptly.repo_create(rand("test"))
         aptly.put([repo.name], [pkg.file.origpath for pkg in packages_simple])
         expected_pkgs = frozenset(pkg._replace(file=None) for pkg in packages_simple)
-        snap1 = aptly.snapshot_create_from_repo(repo.name, rand("snap"),)
+        snap1 = aptly.snapshot_create_from_repo(
+            repo.name,
+            rand("snap"),
+        )
         snap2 = aptly.snapshot_create_from_snapshots(rand("snap"), [snap1])
         snap2 = aptly._search(snap2)
         assert snap2.packages == expected_pkgs

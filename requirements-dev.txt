@@ -3,3 +3,5 @@ tox
 mypy
 twine
 wheel
+pynvim
+black
