@@ -857,14 +857,18 @@ class Client:
 
 def search(
     aptly: Client,
-    queries: Iterable[str] = (""),
+    queries: Iterable[str] = ("",),
     with_deps: bool = False,
     details: bool = False,
     max_workers: int = 5,
+    store_filter: re.Pattern = None,
 ) -> Tuple[List[Tuple[Union[Repo, Snapshot], List[Package]]], List[AptlyApiError]]:
     repos = aptly.repo_list()
     snapshots = aptly.snapshot_list()
-    tasks = [(store, query) for store in repos + snapshots for query in queries]
+    stores = repos + snapshots
+    if store_filter:
+        stores = filter(lambda s: store_filter.search(s.name), stores)
+    tasks = [(store, query) for store in stores for query in queries]
 
     def worker(
         store: Union[Repo, Snapshot], query: str
