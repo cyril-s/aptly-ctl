@@ -1,15 +1,191 @@
 import argparse
 import logging
-from typing import Iterable, Any
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
+from typing import Iterable, Any, List, Union, Optional
 from aptly_ctl import VERSION
-from aptly_ctl.aptly import Client, Repo, Snapshot, search
+from aptly_ctl.aptly import Client, Repo, Snapshot, Package, search
 from aptly_ctl.config import Config, parse_override_dict
-from aptly_ctl.exceptions import AptlyApiError
+
+# from aptly_ctl.exceptions import AptlyApiError
 
 log = logging.getLogger(__name__)
 
 PACKAGE_QUERY_DOC_URL = "https://www.aptly.info/doc/feature/query/"
+
+
+def print_table(
+    orig_table: List[List[Any]],
+    header: List[str] = None,
+    sep: str = " ",
+    header_sep: str = "-",
+    header_intersect_sep: str = " ",
+) -> None:
+    if not orig_table:
+        return
+    table = [list(map(str, row)) for row in orig_table]
+    if header:
+        table.insert(0, header)
+    col_sizes = [0 for _ in range(len(table[0]))]
+    for row in table:
+        for index, elem in enumerate(row):
+            if len(elem) >= col_sizes[index]:
+                col_sizes[index] = len(elem)
+    if header:
+        table.insert(1, [])
+        for size in col_sizes:
+            table[1].append(header_sep * size)
+    for row_num, row in enumerate(table):
+        for index, elem in enumerate(row):
+            print(elem + " " * (col_sizes[index] - len(elem)), end="")
+            if index < len(row) - 1:
+                if header and row_num == 1:
+                    print(header_intersect_sep, end="")
+                else:
+                    print(sep, end="")
+        print()
+
+
+def regex(pattern: str) -> re.Pattern:
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        raise argparse.ArgumentError(exc)
+
+
+class VersionCmd:
+    @staticmethod
+    def config(parser: argparse.ArgumentParser) -> None:
+        parser.set_defaults(func=VersionCmd.action)
+
+    @staticmethod
+    def action(*, aptly: Client, **_unused: Any) -> None:
+        print(aptly.version())
+
+
+class PackageShowCmd:
+    @staticmethod
+    def config(parser: argparse.ArgumentParser) -> None:
+        parser.set_defaults(func=PackageShowCmd.action)
+        parser.add_argument(
+            "keys",
+            metavar="key [ key ... ]",
+            nargs="+",
+            help="package key",
+        )
+
+    @staticmethod
+    def action(*, aptly: Client, keys: Iterable[str], **_unused: Any) -> None:
+        first_fileds = ["Package", "Version", "Architecture"]
+        last_fields = ["Description"]
+        skip_fields = set(first_fileds + last_fields + ["Key", "ShortKey"])
+        for key in keys:
+            package = aptly.package_show(key)
+            print('"', package.key, '"', sep="")
+            for field in first_fileds:
+                print("   ", field, ":", package.fields[field])
+            for field in sorted(package.fields):
+                if field in skip_fields:
+                    continue
+                print("   ", field, ":", package.fields[field])
+            for field in last_fields:
+                print("   ", field, ":", package.fields[field])
+
+
+class PackageSearchCmd:
+    @staticmethod
+    def config(parser: argparse.ArgumentParser) -> None:
+        parser.set_defaults(func=PackageSearchCmd.action)
+        parser.add_argument(
+            "queries",
+            metavar="[ query ... ]",
+            nargs="*",
+            default=("",),
+            help="package queries. Multiple queries are ORed. For query syntax see "
+            + PACKAGE_QUERY_DOC_URL,
+        )
+        parser.add_argument(
+            "--with-deps",
+            action="store_true",
+            help="include dependencies when evaluating package query",
+        )
+        parser.add_argument(
+            "-o",
+            "--out-columns",
+            dest="out_columns_str",
+            metavar="OUT_COLUMNS",
+            default="store_type,store_name,package_name,package_version,package_key_quoted",
+            help="output columns",
+        )
+        parser.add_argument(
+            "-f",
+            "--store-filter",
+            metavar="REGEXP",
+            type=regex,
+            help="Only search packages in repos and snapshots that satisfy filter",
+        )
+        parser.add_argument(
+            "-r",
+            "--sort-reverse",
+            action="store_true",
+            help="sort in descending order",
+        )
+
+    @staticmethod
+    def action(
+        *,
+        aptly: Client,
+        queries: Iterable[str],
+        with_deps: bool,
+        out_columns_str: str,
+        max_workers: int,
+        store_filter: Optional[re.Pattern],
+        sort_reverse: bool,
+        **_unused: Any
+    ) -> None:
+        result, errors = search(
+            aptly,
+            queries,
+            with_deps,
+            max_workers=max_workers,
+            store_filter=store_filter,
+        )
+        out_columns = out_columns_str.split(",")
+        table = [
+            PackageSearchCmd.build_out_row(out_columns, store, package)
+            for store, packages in result
+            for package in packages
+        ]
+        for index in range(len(out_columns) - 1, -1, -1):
+            table.sort(key=lambda row: row[index], reverse=sort_reverse)
+        print_table(table, out_columns)
+        for error in errors:
+            log.error(error)
+
+    @staticmethod
+    def build_out_row(
+        cols: Iterable[str], store: Union[Snapshot, Repo], package: Package
+    ) -> List[Any]:
+        row = []
+        for col in cols:
+            if col == "store_type":
+                row.append("Snapshot" if isinstance(store, Snapshot) else "Repo")
+            elif col == "store_name":
+                row.append(store.name)
+            elif col == "package_key":
+                row.append(package.key)
+            elif col == "package_key_quoted":
+                row.append('"' + package.key + '"')
+            elif col == "package_name":
+                row.append(package.name)
+            elif col == "package_arch":
+                row.append(package.arch)
+            elif col == "package_version":
+                row.append(package.version)
+            elif col == "package_hash":
+                row.append(package.files_hash)
+            else:
+                raise ValueError("Unknown output column name: " + col)
+        return row
 
 
 def main() -> None:
@@ -57,41 +233,27 @@ def main() -> None:
 
     subcommands = parser.add_subparsers(dest="subcommand")
 
-    version_subcommand = subcommands.add_parser(
-        "version", help="show aptly server version"
+    VersionCmd.config(
+        subcommands.add_parser("version", help="show aptly server version")
     )
-    version_subcommand.set_defaults(func=version)
 
     package_subcommand = subcommands.add_parser(
         "package", help="search packages and show info about them"
     )
     package_actions = package_subcommand.add_subparsers(dest="action")
 
-    package_show_action = package_actions.add_parser("show", help="show package info")
-    package_show_action.set_defaults(func=package_show)
-    package_show_action.add_argument(
-        "query", help="package query. For query syntax see " + PACKAGE_QUERY_DOC_URL,
+    PackageShowCmd.config(package_actions.add_parser("show", help="show package info"))
+    PackageSearchCmd.config(
+        package_actions.add_parser("search", help="search packages")
     )
-
-    package_search_action = package_actions.add_parser("search", help="search packages")
-    package_search_action.set_defaults(func=package_search)
-    package_search_action.add_argument(
-        "queries",
-        metavar="[ query ... ]",
-        nargs="*",
-        help="package queries. Multiple queries are ORed. For query syntax see "
-        + PACKAGE_QUERY_DOC_URL,
-    )
-    package_search_action.add_argument(
-        "--with-deps",
-        action="store_true",
-        help="include dependencies when evaluating package query",
-    )
-    package_search_action.add_argument("--format", dest="fmt", help="output format")
 
     args = parser.parse_args()
 
     if not args.subcommand:
+        parser.print_help()
+        parser.exit(2)
+    elif not args.action:
+        # TODO show action help
         parser.print_help()
         parser.exit(2)
 
@@ -121,31 +283,4 @@ def main() -> None:
         signing_config_map=config.signing_config_map,
     )
 
-    args.func(aptly, **vars(args))
-
-
-def version(aptly: Client, **kwargs: Any) -> None:
-    print(aptly.version())
-
-
-def package_show(aptly: Client, query: str, **kwargs: Any) -> None:
-    print(aptly.package_show(key))
-
-
-def package_search(
-    aptly: Client,
-    queries: Iterable[str],
-    with_deps: bool,
-    fmt: str,
-    max_workers: int,
-    **kwargs: Any
-) -> None:
-    fmt = "{s.name} {p.key}"
-    if not queries:
-        queries = ("",)
-    result, errors = search(aptly, queries, max_workers=max_workers)
-    for store, packages in result:
-        for package in packages:
-            print(fmt.format(s=store, p=package))
-    for error in errors:
-        log.error(error)
+    args.func(aptly=aptly, **vars(args))

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from setuptools import setup, find_packages
-from aptly_ctl import __version__
+from aptly_ctl import VERSION
 from os import path
 
 this_directory = path.abspath(path.dirname(__file__))
@@ -10,7 +10,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="aptly-ctl",
-    version=__version__,
+    version=VERSION,
     packages=find_packages(exclude=["tests"]),
     license="MIT",
     author="Kirill Shestakov",
@@ -19,7 +19,14 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/cyril-s/aptly-ctl",
-    install_requires=["aptly-api-client", "PyYAML", "requests", "fnvhash", "unix-ar"],
+    install_requires=[
+        "aptly-api-client",
+        "PyYAML",
+        "requests",
+        "fnvhash",
+        "unix-ar",
+        "python-dateutil",
+    ],
     python_requires=">=3",
     entry_points={"console_scripts": ["aptly-ctl = aptly_ctl.cmd:main"]},
     classifiers=[

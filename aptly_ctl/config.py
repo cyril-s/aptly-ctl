@@ -36,6 +36,7 @@ class Config:
         config = {}
         if path:
             with open(path, "r") as file:
+                # TODO handle exceptions gracefully
                 config = json.load(file)
             log.info("Loaded config from %s", path)
         else:
