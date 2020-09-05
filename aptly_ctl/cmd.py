@@ -1,7 +1,20 @@
 import argparse
 import logging
 import re
-from typing import Iterable, Any, List, Union, Optional
+from typing import (
+    Iterable,
+    Any,
+    List,
+    Union,
+    Optional,
+    NamedTuple,
+    Tuple,
+    ClassVar,
+    Set,
+)
+import json
+import sys
+from datetime import datetime
 from aptly_ctl import VERSION
 from aptly_ctl.aptly import Client, Repo, Snapshot, Package, search
 from aptly_ctl.config import Config, parse_override_dict
@@ -52,6 +65,67 @@ def regex(pattern: str) -> re.Pattern:
         raise argparse.ArgumentError(exc)
 
 
+class PipeMessage(NamedTuple):
+    message: List[Tuple[Union[Repo, Snapshot], List[Package]]]
+
+    def to_json(self) -> str:
+        msg = []
+        for store, packages in self.message:
+            if isinstance(store, Snapshot):
+                store_raw = {
+                    "type": "Snapshot",
+                    "name": store.name,
+                    "description": store.description,
+                    "created_at": store.created_at.isoformat()
+                    if store.created_at
+                    else "",
+                }
+            elif isinstance(store, Repo):
+                store_raw = {
+                    "type": "Repo",
+                    "name": store.name,
+                    "comment": store.comment,
+                    "default_distribution": store.default_distribution,
+                    "default_component": store.default_component,
+                }
+            else:
+                raise TypeError("Invalid store type: " + str(type(store)))
+            store_raw["packages"] = [package.key for package in packages]
+            msg.append(store_raw)
+        return json.dumps(msg)
+
+    @classmethod
+    def from_json(cls, msg: str) -> "PipeMessage":
+        message = []
+        msg = json.loads(msg)
+        for store_raw in msg:
+            if store_raw["type"] == "Snapshot":
+                store = Snapshot(
+                    name=store_raw["name"],
+                    description=store_raw["description"],
+                    created_at=datetime.fromisoformat(store_raw["created_at"])
+                    if store_raw["created_at"]
+                    else None,
+                )
+            elif store_raw["type"] == "Repo":
+                store = Repo(
+                    name=store_raw["name"],
+                    comment=store_raw["comment"],
+                    default_distribution=store_raw["default_distribution"],
+                    default_component=store_raw["default_component"],
+                )
+            else:
+                raise ValueError(
+                    "store "
+                    + store_raw["name"]
+                    + " has invalid type "
+                    + store_raw["type"]
+                )
+            packages = [Package.from_key(key) for key in store_raw["packages"]]
+            message.append((store, packages))
+        return cls(message)
+
+
 class VersionCmd:
     @staticmethod
     def config(parser: argparse.ArgumentParser) -> None:
@@ -63,31 +137,48 @@ class VersionCmd:
 
 
 class PackageShowCmd:
+    first_fileds: ClassVar[List[str]] = ["Package", "Version", "Architecture"]
+    last_fields: ClassVar[List[str]] = ["Description"]
+    skip_fields: ClassVar[Set[str]] = {
+        "Package",
+        "Version",
+        "Architecture",
+        "Description",
+        "Key",
+        "ShortKey",
+    }
+
     @staticmethod
     def config(parser: argparse.ArgumentParser) -> None:
         parser.set_defaults(func=PackageShowCmd.action)
         parser.add_argument(
             "keys",
-            metavar="key [ key ... ]",
-            nargs="+",
+            metavar="[ key ... ]",
+            nargs="*",
             help="package key",
         )
 
     @staticmethod
-    def action(*, aptly: Client, keys: Iterable[str], **_unused: Any) -> None:
-        first_fileds = ["Package", "Version", "Architecture"]
-        last_fields = ["Description"]
-        skip_fields = set(first_fileds + last_fields + ["Key", "ShortKey"])
+    def action(*, aptly: Client, keys: Optional[Iterable[str]], **_unused: Any) -> None:
+        if not keys:
+            if not sys.stdin.isatty():
+                msg = PipeMessage.from_json(sys.stdin.read())
+                keys = {
+                    package.key for _, packages in msg.message for package in packages
+                }
+            else:
+                # TODO add user-friendliness
+                raise ValueError("No package keys supplied")
         for key in keys:
             package = aptly.package_show(key)
             print('"', package.key, '"', sep="")
-            for field in first_fileds:
+            for field in PackageShowCmd.first_fileds:
                 print("   ", field, ":", package.fields[field])
             for field in sorted(package.fields):
-                if field in skip_fields:
+                if field in PackageShowCmd.skip_fields:
                     continue
                 print("   ", field, ":", package.fields[field])
-            for field in last_fields:
+            for field in PackageShowCmd.last_fields:
                 print("   ", field, ":", package.fields[field])
 
 
@@ -140,6 +231,7 @@ class PackageSearchCmd:
         max_workers: int,
         store_filter: Optional[re.Pattern],
         sort_reverse: bool,
+        assume_tty: bool,
         **_unused: Any
     ) -> None:
         result, errors = search(
@@ -149,6 +241,9 @@ class PackageSearchCmd:
             max_workers=max_workers,
             store_filter=store_filter,
         )
+        if not sys.stdout.isatty() and not assume_tty:
+            print(PipeMessage(result).to_json())
+            return
         out_columns = out_columns_str.split(",")
         table = [
             PackageSearchCmd.build_out_row(out_columns, store, package)
@@ -229,6 +324,14 @@ def main() -> None:
         type=int,
         default=5,
         help="number of worker threads for concurrent requests",
+    )
+
+    parser.add_argument(
+        "-a",
+        "--assume-tty",
+        action="store_true",
+        help="assume stdout is always a tty. "
+        "This disables json output when redirecting to a pipe/file",
     )
 
     subcommands = parser.add_subparsers(dest="subcommand")
