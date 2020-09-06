@@ -12,6 +12,7 @@ from typing import (
     Tuple,
     ClassVar,
     Set,
+    Dict,
 )
 import json
 import sys
@@ -19,6 +20,7 @@ from datetime import datetime
 from aptly_ctl import VERSION
 from aptly_ctl.aptly import Client, Repo, Snapshot, Package, search
 from aptly_ctl.config import Config, parse_override_dict
+from aptly_ctl.debian import Version
 
 # from aptly_ctl.exceptions import AptlyApiError
 
@@ -78,7 +80,7 @@ class PipeMessage(NamedTuple):
         msg = []
         for store, packages in self.message:
             if isinstance(store, Snapshot):
-                store_raw = {
+                store_raw: Dict[str, Union[str, List[str]]] = {
                     "type": "Snapshot",
                     "name": store.name,
                     "description": store.description,
@@ -104,10 +106,10 @@ class PipeMessage(NamedTuple):
     def from_json(cls, msg: str) -> "PipeMessage":
         """Build PipeMessage from json"""
         message = []
-        msg = json.loads(msg)
-        for store_raw in msg:
+        stores_raw = json.loads(msg)
+        for store_raw in stores_raw:
             if store_raw["type"] == "Snapshot":
-                store = Snapshot(
+                store: Union[Repo, Snapshot] = Snapshot(
                     name=store_raw["name"],
                     description=store_raw["description"],
                     created_at=datetime.fromisoformat(store_raw["created_at"])
@@ -137,7 +139,7 @@ class SetOrReadPipeMessage(argparse.Action):
     """argparse action which sets argument value as usual if it is present
     or tries to read it from a PipeMessage supplied from the stdin if is is not a tty"""
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None):  # type: ignore
         if values:
             setattr(namespace, self.dest, values)
             return
@@ -202,10 +204,14 @@ class PackageShowCmd:
             keys = {package.key for _, packages in msg.message for package in packages}
         for key in keys:
             package = aptly.package_show(key)
+            if not package.fields:
+                raise RuntimeError(
+                    "'fileds' attribute of Package object was not present"
+                )
             print('"', package.key, '"', sep="")
             for field in PackageShowCmd.first_fileds:
                 print("   ", field, ":", package.fields[field])
-            for field in sorted(package.fields):
+            for field in sorted(package.fields.keys()):
                 if field in PackageShowCmd.skip_fields:
                     continue
                 print("   ", field, ":", package.fields[field])
@@ -294,7 +300,7 @@ class PackageSearchCmd:
         cols: Iterable[str], store: Union[Snapshot, Repo], package: Package
     ) -> List[Any]:
         """build a row in a table to be printed"""
-        row = []
+        row: List[Union[str, Version]] = []
         for col in cols:
             if col == "store_type":
                 row.append("Snapshot" if isinstance(store, Snapshot) else "Repo")
