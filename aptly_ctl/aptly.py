@@ -863,6 +863,19 @@ def search(
     max_workers: int = 5,
     store_filter: re.Pattern = None,
 ) -> Tuple[List[Tuple[Union[Repo, Snapshot], List[Package]]], List[AptlyApiError]]:
+    """
+    Search all queries in aptly local repos and snapshots in parallel
+    and return tuple of results list and errors list. Result list contyains tuples
+    with Repo or Snapshot as first item and a list of Package(s) found in them as the second.
+    List of erros is a list of exception encountered during the search.
+
+    Keyword arguments:
+        queries -- list of search queries. By default lists all packages
+        with_deps -- return dependencies of packages matched in query
+        details -- fill in 'fields' attribute of returned Package instances
+        max_workers -- max number of threads
+        store_filter -- regex to filter Repo and Snapshot instances by name
+    """
     repos = aptly.repo_list()
     snapshots = aptly.snapshot_list()
     stores = repos + snapshots
@@ -900,106 +913,6 @@ def search(
     return result, errors
 
 
-#    def _search_(
-#        self,
-#        container: PackageContainer,
-#        query: str = None,
-#        with_depls: bool = False,
-#        details: bool = False,
-#    ) -> PackageContainer:
-#        """
-#        Search packages in PackageContainer (Repo or Snapshot) using query and
-#        return PackageContainer instance with 'package' attribute set to search
-#        result.
-#
-#        Arguments:
-#            container -- Snapshot or Repo instance
-#
-#        Keyword arguments:
-#            query -- optional search query. By default lists all packages
-#            with_depls -- if True, also returns dependencies of packages
-#                          matched in query
-#            details -- fill in 'fields' attribute of returned Package instances
-#
-#        Raises RepoNotFoundError or SnapshotNotFoundError if container was not
-#        found, and InvalidOperationError if query is invalid.
-#        """
-#        if isinstance(container, Repo):
-#            search_func = self.aptly.repos.search_packages
-#        elif isinstance(container, Snapshot):
-#            search_func = self.aptly.snapshots.list_packages
-#        else:
-#            raise TypeError("Unexpected type '{}'".format(type(container)))
-#        try:
-#            pkgs = search_func(container.name, query, with_depls, details)
-#        except AptlyAPIException as exc:
-#            emsg = exc.args[0]
-#            if exc.status_code == 400 and "parsing failed:" in emsg.lower():
-#                _, _, fail_desc = emsg.partition(":")
-#                raise InvalidOperationError(
-#                    'Bad query "{}":{}'.format(query, fail_desc)
-#                )
-#            if exc.status_code == 404:
-#                if isinstance(container, Repo):
-#                    raise RepoNotFoundError(container.name)
-#                if isinstance(container, Snapshot):
-#                    raise SnapshotNotFoundError(container.name)
-#            raise
-#        return container._replace(
-#            packages=frozenset(Package.from_aptly_api(pkg) for pkg in pkgs)
-#        )
-#
-#    def search(
-#        self,
-#        targets: Sequence[PackageContainers],
-#        queries: Union[Sequence[str], Sequence[None]] = None,
-#        with_deps: bool = False,
-#        details: bool = False,
-#    ) -> Tuple[List[PackageContainers], List[Exception]]:
-#        """
-#        Search list of queries in aptly local repos and snapshots in parallel
-#        and return tuple of PackageContainers list with found packages and list of
-#        exceptions encountered during search
-#
-#        Keyword arguments:
-#            targets -- PackageContainers (Snapshots and Repos) instances
-#            queries -- list of search queries. By default lists all packages
-#            with_depls -- return dependencies of packages matched in query
-#            details -- fill in 'fields' attribute of returned Package instances
-#        """
-#        queries = queries[:] if queries else [None]
-#        results = {}  # type: Dict[PackageContainers, set]
-#        futures = []
-#        errors = []
-#        with ThreadPoolExecutor(max_workers=self.max_workers) as exe:
-#            try:
-#                for target, query in product(targets, queries):
-#                    futures.append(
-#                        exe.submit(self._search_, target, query, with_deps, details)
-#                    )
-#                for future in as_completed(futures, 300):
-#                    try:
-#                        container = future.result()  # type: PackageContainers
-#                        if container.packages:
-#                            key = container._replace(packages=frozenset())
-#                            results.setdefault(key, set()).update(container.packages)
-#                    except Exception as exc:
-#                        errors.append(exc)
-#            except KeyboardInterrupt:
-#                # NOTE we cannot cancel requests that are hanging on open()
-#                # so thread pool's context manager will hang on shutdown()
-#                # untill these requests timeout. Timeout is set in aptly client
-#                # class constructor and defaults to 60 seconds
-#                # Second SIGINT crushes everything though
-#                log.warning("Received SIGINT. Trying to abort requests...")
-#                for future in futures:
-#                    future.cancel()
-#                raise
-#        result = []
-#        for container, pkgs in results.items():
-#            result.append(container._replace(packages=frozenset(pkgs)))
-#        return result, errors
-#
 #    def put(
 #        self,
 #        local_repos: Iterable[str],
@@ -1104,30 +1017,3 @@ def search(
 #            self.aptly.files.delete(path=directory)
 #
 #        return (added, failed, errors)
-#
-#    def remove(self, *repos: Repo) -> List[Tuple[Repo, RepoNotFoundError]]:
-#        """
-#        Deletes packages from local repo
-#
-#        Arguments:
-#            *repos -- aptly_ctl.types.Repo instances where packages from
-#                     'packages' field are to be deleted
-#
-#        Returns list of tuples for every repo for which package removal failed.
-#        The first item in a tuple is an aptly_ctl.types.Repo and the second is
-#        exception with description of failure
-#        """
-#        fails = []
-#        for repo in repos:
-#            if not repo.packages:
-#                continue
-#            try:
-#                self.aptly.repos.delete_packages_by_key(
-#                    repo.name, *[pkg.key for pkg in repo.packages]
-#                )
-#            except AptlyAPIException as exc:
-#                if exc.status_code == 404:
-#                    fails.append((repo, RepoNotFoundError(repo.name)))
-#                else:
-#                    raise
-#        return fails
