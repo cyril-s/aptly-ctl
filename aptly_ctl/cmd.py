@@ -126,6 +126,26 @@ class PipeMessage(NamedTuple):
         return cls(message)
 
 
+class SetOrReadPipeMessage(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if values:
+            setattr(namespace, self.dest, values)
+            return
+        if not sys.stdin.isatty():
+            try:
+                msg = PipeMessage.from_json(sys.stdin.read())
+            except json.JSONDecodeError as exc:
+                raise argparse.ArgumentError(
+                    self, "failed to decode pipe message from stdin: " + str(exc)
+                )
+            setattr(namespace, self.dest, msg)
+            return
+        raise argparse.ArgumentError(
+            self,
+            "arguments were not supplied neither from the command line nor from the stdin!",
+        )
+
+
 class VersionCmd:
     @staticmethod
     def config(parser: argparse.ArgumentParser) -> None:
@@ -153,22 +173,19 @@ class PackageShowCmd:
         parser.set_defaults(func=PackageShowCmd.action)
         parser.add_argument(
             "keys",
-            metavar="[ key ... ]",
+            metavar="<key>",
+            action=SetOrReadPipeMessage,
             nargs="*",
             help="package key",
         )
 
     @staticmethod
-    def action(*, aptly: Client, keys: Optional[Iterable[str]], **_unused: Any) -> None:
-        if not keys:
-            if not sys.stdin.isatty():
-                msg = PipeMessage.from_json(sys.stdin.read())
-                keys = {
-                    package.key for _, packages in msg.message for package in packages
-                }
-            else:
-                # TODO add user-friendliness
-                raise ValueError("No package keys supplied")
+    def action(
+        *, aptly: Client, keys: Union[Iterable[str], PipeMessage], **_unused: Any
+    ) -> None:
+        if isinstance(keys, PipeMessage):
+            msg = keys
+            keys = {package.key for _, packages in msg.message for package in packages}
         for key in keys:
             package = aptly.package_show(key)
             print('"', package.key, '"', sep="")
@@ -334,7 +351,9 @@ def main() -> None:
         "This disables json output when redirecting to a pipe/file",
     )
 
-    subcommands = parser.add_subparsers(dest="subcommand")
+    subcommands = parser.add_subparsers(
+        dest="subcommand", metavar="<subcommand>", required=True
+    )
 
     VersionCmd.config(
         subcommands.add_parser("version", help="show aptly server version")
@@ -343,7 +362,9 @@ def main() -> None:
     package_subcommand = subcommands.add_parser(
         "package", help="search packages and show info about them"
     )
-    package_actions = package_subcommand.add_subparsers(dest="action")
+    package_actions = package_subcommand.add_subparsers(
+        dest="action", metavar="<action>", required=True
+    )
 
     PackageShowCmd.config(package_actions.add_parser("show", help="show package info"))
     PackageSearchCmd.config(
@@ -351,14 +372,6 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-
-    if not args.subcommand:
-        parser.print_help()
-        parser.exit(2)
-    elif not args.action:
-        # TODO show action help
-        parser.print_help()
-        parser.exit(2)
 
     verbosities = (logging.WARN, logging.INFO, logging.DEBUG)
     log_level = verbosities[min(args.verbose, len(verbosities) - 1)]
@@ -373,6 +386,7 @@ def main() -> None:
     app_log_handler = logging.StreamHandler()
     app_log_handler.setFormatter(app_log_formatter)
     app_logger.addHandler(app_log_handler)
+    # TODO urlib logs when -v is not supplied
     if log_level >= logging.DEBUG:
         urllib3_logger = logging.getLogger("urllib3")
         urllib3_logger.setLevel(log_level)
