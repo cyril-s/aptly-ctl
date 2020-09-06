@@ -305,12 +305,18 @@ def main() -> None:
 
     parser.add_argument("--version", action="version", version="%(prog)s " + VERSION)
 
-    parser.add_argument(
+    log_level_parser = parser.add_mutually_exclusive_group()
+    log_level_parser.add_argument(
         "-v",
         "--verbose",
-        action="count",
-        default=0,
-        help="increase verbosity. Can be set mutiple times to increase verbosity even more",
+        action="store_true",
+        help="be more verbose",
+    )
+
+    log_level_parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="enable debug messages",
     )
 
     parser.add_argument("-c", "--config", help="path to config file")
@@ -373,21 +379,28 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    verbosities = (logging.WARN, logging.INFO, logging.DEBUG)
-    log_level = verbosities[min(args.verbose, len(verbosities) - 1)]
-    log_format = "%(levelname)s " + args.subcommand + "(%(process)d)"
-    if log_level >= logging.DEBUG:
-        log_format += " [%(name)s:%(funcName)s()] %(message)s"
+    log_level = logging.WARN
+    if args.verbose:
+        log_level = logging.INFO
+    if args.debug:
+        log_level = logging.DEBUG
+
+    log_format = "%(levelname)s "
+    if hasattr(args, "action"):
+        log_format += args.subcommand + "->" + args.action + "(%(process)d) "
     else:
-        log_format += " %(message)s"
+        log_format += args.subcommand + "(%(process)d) "
+    if log_level <= logging.DEBUG:
+        log_format += "[%(name)s:%(funcName)s()] "
+    log_format += "%(message)s"
+
     app_logger = logging.getLogger(__package__)
     app_logger.setLevel(log_level)
     app_log_formatter = logging.Formatter(fmt=log_format)
     app_log_handler = logging.StreamHandler()
     app_log_handler.setFormatter(app_log_formatter)
     app_logger.addHandler(app_log_handler)
-    # TODO urlib logs when -v is not supplied
-    if log_level >= logging.DEBUG:
+    if log_level <= logging.DEBUG:
         urllib3_logger = logging.getLogger("urllib3")
         urllib3_logger.setLevel(log_level)
         urllib3_logger.addHandler(app_log_handler)
