@@ -1,3 +1,4 @@
+"""This module contains command line entrypoint and functions for corresponding subcommands"""
 import argparse
 import logging
 import re
@@ -33,6 +34,7 @@ def print_table(
     header_sep: str = "-",
     header_intersect_sep: str = " ",
 ) -> None:
+    """Prints matrix orig_table converting every element to string as table"""
     if not orig_table:
         return
     table = [list(map(str, row)) for row in orig_table]
@@ -59,16 +61,20 @@ def print_table(
 
 
 def regex(pattern: str) -> re.Pattern:
+    """Compile pattern into regex object"""
     try:
         return re.compile(pattern)
     except re.error as exc:
-        raise argparse.ArgumentError(exc)
+        raise argparse.ArgumentTypeError("Invalid regex '{}': {}".format(pattern, exc))
 
 
 class PipeMessage(NamedTuple):
+    """Message that is passsed in pipe between aptly-ctl instances"""
+
     message: List[Tuple[Union[Repo, Snapshot], List[Package]]]
 
     def to_json(self) -> str:
+        """Serialize to json"""
         msg = []
         for store, packages in self.message:
             if isinstance(store, Snapshot):
@@ -96,6 +102,7 @@ class PipeMessage(NamedTuple):
 
     @classmethod
     def from_json(cls, msg: str) -> "PipeMessage":
+        """Build PipeMessage from json"""
         message = []
         msg = json.loads(msg)
         for store_raw in msg:
@@ -127,6 +134,9 @@ class PipeMessage(NamedTuple):
 
 
 class SetOrReadPipeMessage(argparse.Action):
+    """argparse action which sets argument value as usual if it is present
+    or tries to read it from a PipeMessage supplied from the stdin if is is not a tty"""
+
     def __call__(self, parser, namespace, values, option_string=None):
         if values:
             setattr(namespace, self.dest, values)
@@ -147,6 +157,8 @@ class SetOrReadPipeMessage(argparse.Action):
 
 
 class VersionCmd:
+    """subcommand to get aptly server version"""
+
     @staticmethod
     def config(parser: argparse.ArgumentParser) -> None:
         parser.set_defaults(func=VersionCmd.action)
@@ -157,6 +169,8 @@ class VersionCmd:
 
 
 class PackageShowCmd:
+    """subcommand to show aptly package info"""
+
     first_fileds: ClassVar[List[str]] = ["Package", "Version", "Architecture"]
     last_fields: ClassVar[List[str]] = ["Description"]
     skip_fields: ClassVar[Set[str]] = {
@@ -200,6 +214,8 @@ class PackageShowCmd:
 
 
 class PackageSearchCmd:
+    """subcommand to search for aptly packages"""
+
     @staticmethod
     def config(parser: argparse.ArgumentParser) -> None:
         parser.set_defaults(func=PackageSearchCmd.action)
@@ -277,6 +293,7 @@ class PackageSearchCmd:
     def build_out_row(
         cols: Iterable[str], store: Union[Snapshot, Repo], package: Package
     ) -> List[Any]:
+        """build a row in a table to be printed"""
         row = []
         for col in cols:
             if col == "store_type":
@@ -362,7 +379,11 @@ def main() -> None:
     )
 
     VersionCmd.config(
-        subcommands.add_parser("version", help="show aptly server version")
+        subcommands.add_parser(
+            "version",
+            description="show aptly server version",
+            help="show aptly server version",
+        )
     )
 
     package_subcommand = subcommands.add_parser(
