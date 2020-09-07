@@ -13,6 +13,7 @@ from typing import (
     ClassVar,
     Set,
     Dict,
+    Pattern,
 )
 import json
 import sys
@@ -268,7 +269,7 @@ class PackageSearchCmd:
         with_deps: bool,
         out_columns_str: str,
         max_workers: int,
-        store_filter: Optional[re.Pattern],
+        store_filter: Optional[Pattern],
         sort_reverse: bool,
         assume_tty: bool,
         **_unused: Any

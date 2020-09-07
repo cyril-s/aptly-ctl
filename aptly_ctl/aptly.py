@@ -1,10 +1,11 @@
+"""This module contains aptly client class and all associated data types"""
 import logging
 import re
 import os
-import urllib3  # type: ignore
+import urllib3
 import json
 import hashlib
-import fnvhash  # type: ignore
+import fnvhash
 from datetime import datetime
 import dateutil.parser
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -20,6 +21,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    Pattern,
 )
 from aptly_ctl.exceptions import AptlyApiError
 from aptly_ctl.debian import Version, get_control_file_fields
@@ -861,7 +863,7 @@ def search(
     with_deps: bool = False,
     details: bool = False,
     max_workers: int = 5,
-    store_filter: re.Pattern = None,
+    store_filter: Pattern = None,
 ) -> Tuple[List[Tuple[Union[Repo, Snapshot], List[Package]]], List[AptlyApiError]]:
     """
     Search all queries in aptly local repos and snapshots in parallel
@@ -880,7 +882,7 @@ def search(
     snapshots = aptly.snapshot_list()
     stores = repos + snapshots
     if store_filter:
-        stores = list(filter(lambda s: store_filter.search(s.name), stores))
+        stores = filter(lambda s: store_filter.search(s), stores)
     tasks = [(store, query) for store in stores for query in queries]
 
     def worker(
