@@ -17,13 +17,14 @@ from typing import (
 )
 import json
 import sys
+import os
 from datetime import datetime
+import urllib3.exceptions
 from aptly_ctl import VERSION
 from aptly_ctl.aptly import Client, Repo, Snapshot, Package, search
 from aptly_ctl.config import Config, parse_override_dict
 from aptly_ctl.debian import Version
-
-# from aptly_ctl.exceptions import AptlyApiError
+from aptly_ctl.exceptions import AptlyCtlError, AptlyApiError
 
 log = logging.getLogger(__name__)
 
@@ -200,11 +201,20 @@ class PackageShowCmd:
     def action(
         *, aptly: Client, keys: Union[Iterable[str], PipeMessage], **_unused: Any
     ) -> None:
+        missing_pkgs = False
         if isinstance(keys, PipeMessage):
             msg = keys
             keys = {package.key for _, packages in msg.message for package in packages}
         for key in keys:
-            package = aptly.package_show(key)
+            try:
+                package = aptly.package_show(key)
+            except AptlyApiError as exc:
+                if exc.status == 404:
+                    log.debug("Printing exception chain", exc_info=True)
+                    log.error("Package with key '%s' wasn't found", key)
+                    missing_pkgs = True
+                    continue
+                raise
             if not package.fields:
                 raise RuntimeError(
                     "'fileds' attribute of Package object was not present"
@@ -218,6 +228,8 @@ class PackageShowCmd:
                 print("   ", field, ":", package.fields[field])
             for field in PackageShowCmd.last_fields:
                 print("   ", field, ":", package.fields[field])
+        if missing_pkgs:
+            raise AptlyCtlError("Some packages were not found")
 
 
 class PackageSearchCmd:
@@ -272,7 +284,7 @@ class PackageSearchCmd:
         store_filter: Optional[Pattern],
         sort_reverse: bool,
         assume_tty: bool,
-        **_unused: Any
+        **_unused: Any,
     ) -> None:
         result, errors = search(
             aptly,
@@ -295,6 +307,8 @@ class PackageSearchCmd:
         print_table(table, out_columns)
         for error in errors:
             log.error(error)
+        if errors:
+            raise AptlyCtlError("Package search finished with errors")
 
     @staticmethod
     def build_out_row(
@@ -322,6 +336,206 @@ class PackageSearchCmd:
             else:
                 raise ValueError("Unknown output column name: " + col)
         return row
+
+
+class RepoListCmd:
+    """subcommand to list local repos"""
+
+    @staticmethod
+    def config(parser: argparse.ArgumentParser) -> None:
+        parser.set_defaults(func=RepoListCmd.action)
+
+    @staticmethod
+    def action(
+        *,
+        aptly: Client,
+        **_unused: Any,
+    ) -> None:
+        repos = aptly.repo_list()
+        if not repos:
+            print("No local repos!")
+            return
+        header = list(repos[0]._fields)
+        table = [list(repo) for repo in sorted(repos)]
+        print_table(table, header=header)
+
+
+class RepoCreateEditCmd:
+    """subcommand to create or edit local repos"""
+
+    @staticmethod
+    def config(parser: argparse.ArgumentParser, is_edit: bool) -> None:
+        parser.set_defaults(func=RepoCreateEditCmd.action)
+        parser.set_defaults(is_edit=is_edit)
+        parser.add_argument("repo_name", metavar="<repo_name>", help="local repo name")
+        parser.add_argument(
+            "--comment",
+            metavar="<repo_comment>",
+            dest="repo_comment",
+            default="",
+            help="comment for local repo",
+        )
+        parser.add_argument(
+            "--dist",
+            metavar="<default_distribution>",
+            dest="default_distribution",
+            default="",
+            help="default distribution. When creating publish"
+            " from local repo, this attribute is looked up to determine target"
+            " distribution for publish if it is not supplied explicitly.",
+        )
+        parser.add_argument(
+            "--comp",
+            metavar="<default_component>",
+            dest="default_component",
+            default="",
+            help="default component. When creating publish"
+            " from local repo, this attribute is looked up to determine target"
+            " component for this repo if it is not supplied explicitly.",
+        )
+
+    @staticmethod
+    def action(
+        *,
+        aptly: Client,
+        repo_name: str,
+        repo_comment: str,
+        default_distribution: str,
+        default_component: str,
+        is_edit: bool,
+        **_unused: Any,
+    ) -> None:
+        if is_edit:
+            try:
+                repo = aptly.repo_edit(
+                    repo_name,
+                    repo_comment,
+                    default_distribution,
+                    default_component,
+                )
+            except AptlyApiError as exc:
+                if exc.status == 404:
+                    raise AptlyCtlError(
+                        f"Failed to edit local repo '{repo_name}'"
+                    ) from exc
+                raise
+        else:
+            try:
+                repo = aptly.repo_create(
+                    repo_name,
+                    repo_comment,
+                    default_distribution,
+                    default_component,
+                )
+            except AptlyApiError as exc:
+                if exc.status == 400:
+                    raise AptlyCtlError(
+                        f"Failed to create local repo '{repo_name}'"
+                    ) from exc
+                raise
+        print_table([list(repo)], header=list(repo._fields))
+
+
+class RepoDropCmd:
+    """subcommand to delete local repos"""
+
+    @staticmethod
+    def config(parser: argparse.ArgumentParser) -> None:
+        parser.set_defaults(func=RepoDropCmd.action)
+        parser.add_argument("repo_name", metavar="<repo_name>", help="local repo name")
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="delete local repo even if it's pointed by a snapshot",
+        )
+
+    @staticmethod
+    def action(*, aptly: Client, repo_name: str, force: bool, **_unused: Any) -> None:
+        # TODO add ability to delete multiple repos
+        # TODO read repos to delete from pipe message
+        try:
+            aptly.repo_delete(repo_name, force)
+        except AptlyApiError as exc:
+            if exc.status in [404, 409]:
+                raise AptlyCtlError(f"Failed to delete repo '{repo_name}'") from exc
+            raise
+        print(f"Deleted repo '{repo_name}'")
+
+
+class RepoAddCmd:
+    """subcommand to upload and add packages to local repos"""
+
+    @staticmethod
+    def config(parser: argparse.ArgumentParser) -> None:
+        parser.set_defaults(func=RepoAddCmd.action)
+        parser.add_argument(
+            "--force-replace",
+            action="store_true",
+            help="when adding package that conflicts with existing package, remove existing package",
+        )
+        parser.add_argument("repo", metavar="<repo>", help="local repository name")
+        parser.add_argument(
+            "package_files", metavar="<package>", nargs="+", help="package file"
+        )
+
+    @staticmethod
+    def action(
+        *,
+        aptly: Client,
+        force_replace: bool,
+        repo: str,
+        package_files: List[str],
+        **_unused: Any,
+    ) -> None:
+        # TODO refactor
+        # TODO output to json
+        timestamp = datetime.utcnow().timestamp()
+        # os.getpid just in case 2 instances launched at the same time
+        directory = f"aptly_ctl_repo_add_{timestamp:.0f}_{os.getpid()}"
+        packages = {pkg.dir_ref: pkg for pkg in map(Package.from_file, package_files)}
+
+        log.info("Uploading packages into directory '%s'", directory)
+        try:
+            header = ["package_name", "package_version", "package_key_quoted"]
+            table = []
+            uploaded_files = aptly.files_upload(package_files, directory)
+            log.debug("Uploaded files %s", uploaded_files)
+            try:
+                files_report = aptly.repo_add_packages(
+                    repo, directory, force_replace=force_replace
+                )
+            except AptlyApiError as exc:
+                if exc.status == 404:
+                    raise AptlyCtlError(
+                        f"Failed to upload packages to local repo '{repo}'"
+                    ) from exc
+                raise
+            log.debug("Files report is: %s", files_report)
+            for failed_file in files_report.failed:
+                log.error("Failed to add file '%s'", failed_file)
+            for warning in files_report.warnings:
+                log.warning(warning)
+            for removed_file in files_report.removed:
+                log.info("Removed file '%s'", removed_file)
+            for added_file_dir_ref in files_report.added:
+                if added_file_dir_ref in packages:
+                    pkg = packages[added_file_dir_ref]
+                    table.append([pkg.name, pkg.version, '"' + pkg.key + '"'])
+                    del packages[added_file_dir_ref]
+                else:
+                    log.error(
+                        "Package %s added but won't displayed in output",
+                        added_file_dir_ref,
+                    )
+            if packages:
+                log.error(
+                    "Could not match all added dir refs with uploaded packages for this packages: %s",
+                    packages,
+                )
+            table.sort()
+            print_table(table, header)
+        finally:
+            aptly.files_delete_dir(directory)
 
 
 def main() -> None:
@@ -385,6 +599,7 @@ def main() -> None:
         dest="subcommand", metavar="<subcommand>", required=True
     )
 
+    # version subcommand
     VersionCmd.config(
         subcommands.add_parser(
             "version",
@@ -393,16 +608,71 @@ def main() -> None:
         )
     )
 
+    # package subcommand
     package_subcommand = subcommands.add_parser(
         "package", help="search packages and show info about them"
     )
+
     package_actions = package_subcommand.add_subparsers(
         dest="action", metavar="<action>", required=True
     )
 
     PackageShowCmd.config(package_actions.add_parser("show", help="show package info"))
+
     PackageSearchCmd.config(
-        package_actions.add_parser("search", help="search packages")
+        package_actions.add_parser(
+            "search", description="search packages", help="search packages"
+        )
+    )
+
+    # repo subcommand
+    repo_subcommand = subcommands.add_parser(
+        "repo", help="manage local repos and add packages to them"
+    )
+
+    repo_actions = repo_subcommand.add_subparsers(
+        dest="action", metavar="<action>", required=True
+    )
+
+    RepoCreateEditCmd.config(
+        repo_actions.add_parser(
+            "create",
+            description="create local package repository",
+            help="create local package repository",
+        ),
+        False,
+    )
+
+    RepoCreateEditCmd.config(
+        repo_actions.add_parser(
+            "edit",
+            description="edit local package repository",
+            help="edit local package repository",
+        ),
+        True,
+    )
+
+    RepoAddCmd.config(
+        repo_actions.add_parser(
+            "add",
+            description="add packages to local repository from .deb (binary packages)",
+            help="add packages to local repository from .deb (binary packages)",
+        )
+    )
+
+    RepoListCmd.config(
+        repo_actions.add_parser(
+            "list", description="list local repos", help="list local repos"
+        )
+    )
+
+    RepoDropCmd.config(
+        repo_actions.add_parser(
+            "drop",
+            aliases=["delete"],
+            description="delete local repos",
+            help="delete local repos",
+        )
     )
 
     args = parser.parse_args()
@@ -441,4 +711,18 @@ def main() -> None:
         signing_config_map=config.signing_config_map,
     )
 
-    args.func(aptly=aptly, **vars(args))
+    try:
+        args.func(aptly=aptly, **vars(args))
+    except urllib3.exceptions.HTTPError as exc:
+        log.debug("Printing exception chain", exc_info=True)
+        log.error("Failed to communicate with aptly API: %s", exc)
+        sys.exit(1)
+    except AptlyCtlError as exc:
+        log.debug("Printing exception chain", exc_info=True)
+        error_msg = str(exc)
+        if exc.__cause__:
+            error_msg += f": {exc.__cause__}"
+        elif exc.__context__:
+            error_msg += f": {exc.__context__}"
+        log.error(error_msg)
+        sys.exit(2)

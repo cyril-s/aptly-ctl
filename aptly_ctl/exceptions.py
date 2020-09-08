@@ -51,3 +51,9 @@ class AptlyApiError(Exception):
             errors.append((msg["error"], msg.get("meta", "")))
 
         self.errors = tuple(errors)
+
+
+class AptlyCtlError(Exception):
+    """Exception class that aptly-ctl subcommands throw"""
+
+    pass
