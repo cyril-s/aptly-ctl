@@ -82,7 +82,6 @@ class Package(NamedTuple):
     prefix: str
     files_hash: str
     fields: Optional[Dict[str, str]] = None
-    file: Optional[PackageFileInfo] = None
 
     @property
     def key(self) -> str:
@@ -107,7 +106,7 @@ class Package(NamedTuple):
         )
 
     @classmethod
-    def from_file(cls, filepath: str) -> "Package":
+    def from_file(cls, filepath: str) -> Tuple["Package", PackageFileInfo]:
         """
         Build representation of aptly package from package on local filesystem
         """
@@ -155,14 +154,16 @@ class Package(NamedTuple):
         fields["SHA512"] = hashes[3].hexdigest()
         fields["ShortKey"] = " ".join(key_fields[:-1])
         fields["Size"] = str(size)
-        return cls(
-            name=name,
-            version=version,
-            arch=arch,
-            prefix="",
-            files_hash=files_hash,
-            fields=fields,
-            file=fileinfo,
+        return (
+            cls(
+                name=name,
+                version=version,
+                arch=arch,
+                prefix="",
+                files_hash=files_hash,
+                fields=fields,
+            ),
+            fileinfo,
         )
 
     @classmethod

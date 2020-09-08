@@ -21,7 +21,7 @@ import os
 from datetime import datetime
 import urllib3.exceptions
 from aptly_ctl import VERSION
-from aptly_ctl.aptly import Client, Repo, Snapshot, Package, search
+from aptly_ctl.aptly import Client, Repo, Snapshot, Package, search, PackageFileInfo
 from aptly_ctl.config import Config, parse_override_dict
 from aptly_ctl.debian import Version
 from aptly_ctl.exceptions import AptlyCtlError, AptlyApiError
@@ -487,12 +487,25 @@ class RepoAddCmd:
         package_files: List[str],
         **_unused: Any,
     ) -> None:
-        # TODO refactor
-        # TODO output to json
         timestamp = datetime.utcnow().timestamp()
         # os.getpid just in case 2 instances launched at the same time
         directory = f"aptly_ctl_repo_add_{timestamp:.0f}_{os.getpid()}"
-        packages = {pkg.dir_ref: pkg for pkg in map(Package.from_file, package_files)}
+        packages: Dict[str, Tuple[Package, PackageFileInfo]] = {}
+        for pkg_file in package_files:
+            try:
+                pkg, file_info = Package.from_file(pkg_file)
+            except Exception as exc:
+                raise AptlyCtlError(f"Failed to load package '{pkg_file}'") from exc
+            if pkg.dir_ref in packages:
+                log.error(
+                    "Package '%s' (%s) conflicts with '%s' (%s)",
+                    file_info.path,
+                    pkg.key,
+                    packages[pkg.dir_ref][1].path,
+                    packages[pkg.dir_ref][0].key,
+                )
+            else:
+                packages[pkg.dir_ref] = (pkg, file_info)
 
         log.info("Uploading packages into directory '%s'", directory)
         try:
@@ -519,7 +532,7 @@ class RepoAddCmd:
                 log.info("Removed file '%s'", removed_file)
             for added_file_dir_ref in files_report.added:
                 if added_file_dir_ref in packages:
-                    pkg = packages[added_file_dir_ref]
+                    pkg = packages[added_file_dir_ref][0]
                     table.append([pkg.name, pkg.version, '"' + pkg.key + '"'])
                     del packages[added_file_dir_ref]
                 else:
