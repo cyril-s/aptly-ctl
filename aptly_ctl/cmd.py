@@ -23,43 +23,11 @@ from aptly_ctl.aptly import Client, Repo, Snapshot, Package, search, PackageFile
 from aptly_ctl.config import Config, parse_override_dict
 from aptly_ctl.debian import Version
 from aptly_ctl.exceptions import AptlyCtlError, AptlyApiError
+from aptly_ctl.util import print_table
 
 log = logging.getLogger(__name__)
 
 PACKAGE_QUERY_DOC_URL = "https://www.aptly.info/doc/feature/query/"
-
-
-def print_table(
-    orig_table: List[List[Any]],
-    header: List[str] = None,
-    sep: str = " ",
-    header_sep: str = "-",
-    header_intersect_sep: str = " ",
-) -> None:
-    """Prints matrix orig_table converting every element to string as table"""
-    if not orig_table:
-        return
-    table = [list(map(str, row)) for row in orig_table]
-    if header:
-        table.insert(0, header)
-    col_sizes = [0 for _ in range(len(table[0]))]
-    for row in table:
-        for index, elem in enumerate(row):
-            if len(elem) >= col_sizes[index]:
-                col_sizes[index] = len(elem)
-    if header:
-        table.insert(1, [])
-        for size in col_sizes:
-            table[1].append(header_sep * size)
-    for row_num, row in enumerate(table):
-        for index, elem in enumerate(row):
-            print(elem + " " * (col_sizes[index] - len(elem)), end="")
-            if index < len(row) - 1:
-                if header and row_num == 1:
-                    print(header_intersect_sep, end="")
-                else:
-                    print(sep, end="")
-        print()
 
 
 def regex(pattern: str) -> re.Pattern:
