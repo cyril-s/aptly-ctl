@@ -19,14 +19,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/cyril-s/aptly-ctl",
-    install_requires=[
-        "aptly-api-client",
-        "PyYAML",
-        "requests",
-        "fnvhash",
-        "unix-ar",
-        "python-dateutil",
-    ],
+    install_requires=["urllib3", "fnvhash", "unix-ar", "python-dateutil"],
     python_requires=">=3",
     entry_points={"console_scripts": ["aptly-ctl = aptly_ctl.cmd:main"]},
     classifiers=[
