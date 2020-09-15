@@ -218,6 +218,9 @@ class Source(NamedTuple):
     name: str
     component: Optional[str] = None
 
+    def __str__(self) -> str:
+        return f"{self.name} ({self.component})"
+
 
 class Publish(NamedTuple):
     """Represents publish in aptly"""
