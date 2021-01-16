@@ -27,6 +27,7 @@ from aptly_ctl.aptly import (
     search,
     PackageFileInfo,
     Publish,
+    Source,
 )
 from aptly_ctl.config import Config, parse_override_dict
 from aptly_ctl.debian import Version
@@ -36,6 +37,7 @@ from aptly_ctl.util import print_table
 log = logging.getLogger(__name__)
 
 PACKAGE_QUERY_DOC_URL = "https://www.aptly.info/doc/feature/query/"
+DEBIAN_POLICY_BUT_AUTOMATIC_UPGRADES_LINK = "https://wiki.debian.org/DebianRepository/Format#NotAutomatic_and_ButAutomaticUpgrades"
 
 
 def regex(pattern: str) -> re.Pattern:
@@ -492,6 +494,20 @@ def repo_add(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def print_publishes(pubs: Iterable[Publish]) -> None:
+    """print a list of Publish instances to stdout"""
+    leading_fields = ["source_kind", "distribution", "prefix", "storage"]
+    header = list(Publish._fields)
+    for field in leading_fields:
+        header.remove(field)
+        header.insert(0, field)
+    table = [[getattr(pub, attr) for attr in header] for pub in pubs]
+    for index in range(len(leading_fields) - 1, -1, -1):
+        # pylint: disable=cell-var-from-loop
+        table.sort(key=lambda row: row[index])
+    print_table(table, header=header)
+
+
 def publish_list(parser: argparse.ArgumentParser) -> None:
     """configure 'publish list' subcommand"""
 
@@ -500,15 +516,201 @@ def publish_list(parser: argparse.ArgumentParser) -> None:
         if not pubs:
             print("There are no publishes!")
             return
-        header = list(Publish._fields)
-        for field in ["source_kind", "distribution", "prefix", "storage"]:
-            header.remove(field)
-            header.insert(0, field)
-        table = [[getattr(pub, attr) for attr in header] for pub in pubs]
-        for index in range(2, -1, -1):
-            # pylint: disable=cell-var-from-loop
-            table.sort(key=lambda row: row[index])
-        print_table(table, header=header)
+        print_publishes(pubs)
+
+    parser.set_defaults(func=action)
+
+
+def publish_create(
+    parser: argparse.ArgumentParser, snapshot_action: bool = True
+) -> None:
+    """configure 'publish repo' and 'publish snapshot' subcommands"""
+
+    if snapshot_action:
+        parser.add_argument(
+            "source_names",
+            metavar="<snapshot_name>",
+            nargs="+",
+            help="snapshot name to publish",
+        )
+    else:
+        parser.add_argument(
+            "source_names",
+            metavar="<repo_name>",
+            nargs="+",
+            help="repo name to publish",
+        )
+
+    parser.add_argument(
+        "-s",
+        "--storage",
+        metavar="<storage>",
+        default="",
+        help="Storage type to publish to. If absent, aptly server local filesystem is assumed",
+    )
+
+    parser.add_argument(
+        "-p",
+        "--prefix",
+        metavar="<prefix>",
+        default="",
+        help="prefix for publishing. If not specified, sources would be published"
+        " to the root of the public directory",
+    )
+
+    parser.add_argument(
+        "-d",
+        "--distribution",
+        metavar="<distribution>",
+        default="",
+        help="distribution name to publish. If absent, guessed from original repository distribution",
+    )
+
+    parser.add_argument(
+        "-c",
+        "--component",
+        metavar="<component>[,<component>,...]",
+        help="component name to publish. Guessed from original repository (if any), or defaults to main."
+        " For multi-component publishing, separate components with commas",
+    )
+
+    parser.add_argument(
+        "-a",
+        "--architectures",
+        metavar="<architecture>[,<architecture>,...]",
+        help="override default list of architectures to be published",
+    )
+
+    parser.add_argument(
+        "--label", metavar="<label>", default="", help="value for Label: field",
+    )
+
+    parser.add_argument(
+        "--origin", metavar="<origin>", default="", help="value for Origin: field",
+    )
+
+    parser.add_argument(
+        "--acquire-by-hash",
+        action="store_true",
+        help="provide index files by hash if unique",
+    )
+
+    parser.add_argument(
+        "--not-automatic", action="store_true", help="Set NotAutomatic: field to 'yes'",
+    )
+
+    parser.add_argument(
+        "--but-automatic-upgrades",
+        action="store_true",
+        help="set ButAutomaticUpgrades: field to 'yes'. Can't be set without --not-automatic",
+    )
+
+    parser.add_argument(
+        "--force-overwrite",
+        action="store_true",
+        help="overwrite files in pool/ directory without notice",
+    )
+
+    parser.add_argument(
+        "--skip-cleanup",
+        action="store_true",
+        help="don’t remove unreferenced files in prefix/component",
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        source_names: List[str],
+        storage: str,
+        prefix: str,
+        distribution: str,
+        component: Optional[str],
+        architectures: Optional[str],
+        label: str,
+        origin: str,
+        acquire_by_hash: bool,
+        not_automatic: bool,
+        but_automatic_upgrades: bool,
+        force_overwrite: bool,
+        skip_cleanup: bool,
+        **_unused: Any,
+    ) -> None:
+        if but_automatic_upgrades and not not_automatic:
+            raise AptlyCtlError(
+                "Can't set --but-automatic-upgrades without setting --not-automatic. "
+                "It is against Debian policy: "
+                + DEBIAN_POLICY_BUT_AUTOMATIC_UPGRADES_LINK
+            )
+
+        source_kind = "snapshot" if snapshot_action else "local"
+        arch = architectures.split(",") if architectures else []
+        comps = component.split(",") if component else []
+
+        if comps and len(comps) != len(source_names):
+            raise AptlyCtlError(
+                "If you provide components, provide them for every source"
+            )
+
+        if comps:
+            sources = [Source(name, comp) for name, comp in zip(source_names, comps)]
+        else:
+            sources = [Source(name) for name in source_names]
+
+        pub = aptly.publish_create(
+            source_kind=source_kind,
+            sources=sources,
+            storage=storage,
+            prefix=prefix,
+            distribution=distribution,
+            architectures=arch,
+            label=label,
+            origin=origin,
+            not_automatic=not_automatic,
+            but_automatic_upgrades=but_automatic_upgrades,
+            acquire_by_hash=acquire_by_hash,
+            force_overwrite=force_overwrite,
+            skip_cleanup=skip_cleanup,
+        )
+
+        print_publishes([pub])
+
+    parser.set_defaults(func=action)
+
+
+def publish_drop(parser: argparse.ArgumentParser) -> None:
+    """configure 'publish drop' subcommand"""
+
+    parser.add_argument(
+        "storage", metavar="<storage>", help="Storage type of a publish to drop",
+    )
+
+    parser.add_argument(
+        "prefix", metavar="<prefix>", help="prefix of a publish to drop",
+    )
+
+    parser.add_argument(
+        "distribution",
+        metavar="<distribution>",
+        help="distribution of a publish to drop",
+    )
+
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="force published repository removal even if component cleanup fails",
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        storage: str,
+        prefix: str,
+        distribution: str,
+        force: bool,
+        **_unused: Any,
+    ) -> None:
+        pass
 
     parser.set_defaults(func=action)
 
@@ -658,6 +860,30 @@ def parse_args() -> argparse.Namespace:
     publish_list(
         publish_actions.add_parser(
             "list", description="list publishes", help="list publishes"
+        )
+    )
+
+    publish_create(
+        publish_actions.add_parser(
+            "snapshot",
+            description="publishes snapshot as repository to be consumed by apt",
+            help="publishes snapshot as repository to be consumed by apt",
+        ),
+        True,
+    )
+
+    publish_create(
+        publish_actions.add_parser(
+            "repo",
+            description="publish local repository directly, bypassing snapshot creation step",
+            help="publish local repository directly, bypassing snapshot creation step",
+        ),
+        False,
+    )
+
+    publish_drop(
+        publish_actions.add_parser(
+            "drop", description="drop publishes", help="drop publishes"
         )
     )
 
