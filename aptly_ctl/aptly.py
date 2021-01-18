@@ -315,6 +315,9 @@ class Publish(NamedTuple):
         prefix = prefix.replace("/", "_")
         return prefix
 
+    def __str__(self) -> str:
+        return f"{self.full_prefix}/{self.distribution}"
+
 
 class FilesReport(NamedTuple):
     failed: Sequence[str] = ()
