@@ -228,7 +228,10 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         help="Only search packages in repos and snapshots that satisfy filter",
     )
     parser.add_argument(
-        "-r", "--sort-reverse", action="store_true", help="sort in descending order",
+        "-r",
+        "--sort-reverse",
+        action="store_true",
+        help="sort in descending order",
     )
 
     def build_out_row(
@@ -301,7 +304,11 @@ def package_search(parser: argparse.ArgumentParser) -> None:
 def repo_list(parser: argparse.ArgumentParser) -> None:
     """configure 'repo list' subcommand"""
 
-    def action(*, aptly: Client, **_unused: Any,) -> None:
+    def action(
+        *,
+        aptly: Client,
+        **_unused: Any,
+    ) -> None:
         repos = aptly.repo_list()
         if not repos:
             print("No local repos!")
@@ -354,7 +361,10 @@ def repo_create_or_edit(parser: argparse.ArgumentParser, is_edit: bool) -> None:
         if is_edit:
             try:
                 repo = aptly.repo_edit(
-                    repo_name, repo_comment, default_distribution, default_component,
+                    repo_name,
+                    repo_comment,
+                    default_distribution,
+                    default_component,
                 )
             except AptlyApiError as exc:
                 if exc.status == 404:
@@ -365,7 +375,10 @@ def repo_create_or_edit(parser: argparse.ArgumentParser, is_edit: bool) -> None:
         else:
             try:
                 repo = aptly.repo_create(
-                    repo_name, repo_comment, default_distribution, default_component,
+                    repo_name,
+                    repo_comment,
+                    default_distribution,
+                    default_component,
                 )
             except AptlyApiError as exc:
                 if exc.status == 400:
@@ -511,7 +524,11 @@ def print_publishes(pubs: Iterable[Publish]) -> None:
 def publish_list(parser: argparse.ArgumentParser) -> None:
     """configure 'publish list' subcommand"""
 
-    def action(*, aptly: Client, **_unused: Any,) -> None:
+    def action(
+        *,
+        aptly: Client,
+        **_unused: Any,
+    ) -> None:
         pubs = aptly.publish_list()
         if not pubs:
             print("There are no publishes!")
@@ -582,11 +599,17 @@ def publish_create(
     )
 
     parser.add_argument(
-        "--label", metavar="<label>", default="", help="value for Label: field",
+        "--label",
+        metavar="<label>",
+        default="",
+        help="value for Label: field",
     )
 
     parser.add_argument(
-        "--origin", metavar="<origin>", default="", help="value for Origin: field",
+        "--origin",
+        metavar="<origin>",
+        default="",
+        help="value for Origin: field",
     )
 
     parser.add_argument(
@@ -596,7 +619,9 @@ def publish_create(
     )
 
     parser.add_argument(
-        "--not-automatic", action="store_true", help="Set NotAutomatic: field to 'yes'",
+        "--not-automatic",
+        action="store_true",
+        help="Set NotAutomatic: field to 'yes'",
     )
 
     parser.add_argument(
@@ -681,11 +706,15 @@ def publish_drop(parser: argparse.ArgumentParser) -> None:
     """configure 'publish drop' subcommand"""
 
     parser.add_argument(
-        "storage", metavar="<storage>", help="Storage type of a publish to drop",
+        "storage",
+        metavar="<storage>",
+        help="Storage type of a publish to drop",
     )
 
     parser.add_argument(
-        "prefix", metavar="<prefix>", help="prefix of a publish to drop",
+        "prefix",
+        metavar="<prefix>",
+        help="prefix of a publish to drop",
     )
 
     parser.add_argument(
@@ -723,11 +752,16 @@ def parse_args() -> argparse.Namespace:
 
     log_level_parser = parser.add_mutually_exclusive_group()
     log_level_parser.add_argument(
-        "-v", "--verbose", action="store_true", help="be more verbose",
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="be more verbose",
     )
 
     log_level_parser.add_argument(
-        "--debug", action="store_true", help="enable debug messages",
+        "--debug",
+        action="store_true",
+        help="enable debug messages",
     )
 
     parser.add_argument("-c", "--config", help="path to config file")
