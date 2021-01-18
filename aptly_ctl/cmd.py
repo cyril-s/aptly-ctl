@@ -507,6 +507,81 @@ def repo_add(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def repo_remove(parser: argparse.ArgumentParser) -> None:
+    """configure 'repo remove' subcommand"""
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="just show packages to be removed",
+    )
+    parser.add_argument(
+        "-U",
+        "--update-publishes",
+        action="store_true",
+        help="update dependent publishes",
+    )
+    parser.add_argument(
+        "repo_name", metavar="<repo_name>", help="local repository name"
+    )
+    parser.add_argument(
+        "package_query", metavar="<package_query>", help="package query"
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        dry_run: bool,
+        update_publishes: bool,
+        repo_name: str,
+        package_query: str,
+        **_unused: Any,
+    ) -> None:
+        packages = aptly.repo_search(repo_name, package_query)
+        if not packages:
+            print("Nothing to remove")
+            return
+        packages.sort()
+        if dry_run:
+            print_table([[p.key] for p in packages], [f"Would delete from {repo_name}"])
+        else:
+            aptly.repo_delete_packages_by_key(repo_name, [p.key for p in packages])
+            print_table([[p.key] for p in packages], [f"Deleted from {repo_name}"])
+
+        if not update_publishes:
+            return
+        publishes = []
+        for publish in aptly.publish_list():
+            if publish.source_kind != "local":
+                continue
+            for source in publish.sources:
+                if repo_name == source.name:
+                    publishes.append(publish)
+        if not publishes:
+            return
+        print()
+        if dry_run:
+            print_table([[p] for p in publishes], ["Publishes to update"])
+        else:
+            updated_publishes = []
+            failed_to_updated_publishes = []
+            for publish in publishes:
+                try:
+                    updated_publishes.append(aptly.publish_update(publish))
+                except AptlyApiError as exc:
+                    failed_to_updated_publishes.append([publish, int(exc.status), exc])
+            print_table([[p] for p in updated_publishes], ["Updated publishes"])
+            if failed_to_updated_publishes:
+                print()
+                print_table(
+                    failed_to_updated_publishes,
+                    ["Failed to update publishes", "HTTP status code", "Reason"],
+                )
+                raise AptlyCtlError("Some publishes failed to update")
+
+    parser.set_defaults(func=action)
+
+
 def print_publishes(pubs: Iterable[Publish]) -> None:
     """print a list of Publish instances to stdout"""
     leading_fields = ["source_kind", "distribution", "prefix", "storage"]
@@ -879,6 +954,14 @@ def parse_args() -> argparse.Namespace:
             aliases=["delete"],
             description="delete local repos",
             help="delete local repos",
+        )
+    )
+
+    repo_remove(
+        repo_actions.add_parser(
+            "remove",
+            description="remove packages from local repo",
+            help="remove packages from local repo",
         )
     )
 
