@@ -12,6 +12,7 @@ from typing import (
     Tuple,
     Dict,
     Pattern,
+    Container,
 )
 import json
 import sys
@@ -134,6 +135,47 @@ class SetOrReadPipeMessage(argparse.Action):  # pylint: disable=too-few-public-m
             self,
             "arguments were not supplied neither from the command line nor from the stdin!",
         )
+
+
+def update_dependent_publishes(
+    aptly: Client,
+    repo_names: Container[str],
+    dry_run: bool,
+) -> None:
+    """Find and update publishes, that were created from local repos, listed in repo_names argument"""
+    publishes = []
+    for publish in aptly.publish_list():
+        if publish.source_kind != "local":
+            continue
+        for source in publish.sources:
+            if source.name in repo_names:
+                publishes.append(publish)
+
+    if not publishes:
+        return
+    print()
+
+    if dry_run:
+        print_table([[p] for p in publishes], ["Publishes to update"])
+        return
+
+    updated_publishes = []
+    failed_to_updated_publishes = []
+    for publish in publishes:
+        try:
+            updated_publishes.append(aptly.publish_update(publish))
+        except AptlyApiError as exc:
+            failed_to_updated_publishes.append([publish, int(exc.status), exc])
+
+    print_table([[p] for p in updated_publishes], ["Updated publishes"])
+
+    if failed_to_updated_publishes:
+        print()
+        print_table(
+            failed_to_updated_publishes,
+            ["Failed to update publishes", "HTTP status code", "Reason"],
+        )
+        raise AptlyCtlError("Some publishes failed to update")
 
 
 def version(parser: argparse.ArgumentParser) -> None:
@@ -444,6 +486,12 @@ def repo_add(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="when adding package that conflicts with existing package, remove existing package",
     )
+    parser.add_argument(
+        "-U",
+        "--update-publishes",
+        action="store_true",
+        help="update dependent publishes",
+    )
     parser.add_argument("repo", metavar="<repo>", help="local repository name")
     parser.add_argument(
         "package_files", metavar="<package>", nargs="+", help="package file"
@@ -453,6 +501,7 @@ def repo_add(parser: argparse.ArgumentParser) -> None:
         *,
         aptly: Client,
         force_replace: bool,
+        update_publishes: bool,
         repo: str,
         package_files: List[str],
         **_unused: Any,
@@ -504,6 +553,9 @@ def repo_add(parser: argparse.ArgumentParser) -> None:
         finally:
             aptly.files_delete_dir(directory)
 
+        if update_publishes:
+            update_dependent_publishes(aptly, [repo], False)
+
     parser.set_defaults(func=action)
 
 
@@ -548,36 +600,8 @@ def repo_remove(parser: argparse.ArgumentParser) -> None:
             aptly.repo_delete_packages_by_key(repo_name, [p.key for p in packages])
             print_table([[p.key] for p in packages], [f"Deleted from {repo_name}"])
 
-        if not update_publishes:
-            return
-        publishes = []
-        for publish in aptly.publish_list():
-            if publish.source_kind != "local":
-                continue
-            for source in publish.sources:
-                if repo_name == source.name:
-                    publishes.append(publish)
-        if not publishes:
-            return
-        print()
-        if dry_run:
-            print_table([[p] for p in publishes], ["Publishes to update"])
-        else:
-            updated_publishes = []
-            failed_to_updated_publishes = []
-            for publish in publishes:
-                try:
-                    updated_publishes.append(aptly.publish_update(publish))
-                except AptlyApiError as exc:
-                    failed_to_updated_publishes.append([publish, int(exc.status), exc])
-            print_table([[p] for p in updated_publishes], ["Updated publishes"])
-            if failed_to_updated_publishes:
-                print()
-                print_table(
-                    failed_to_updated_publishes,
-                    ["Failed to update publishes", "HTTP status code", "Reason"],
-                )
-                raise AptlyCtlError("Some publishes failed to update")
+        if update_publishes:
+            update_dependent_publishes(aptly, [repo_name], dry_run)
 
     parser.set_defaults(func=action)
 
