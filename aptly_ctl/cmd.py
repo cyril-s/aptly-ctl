@@ -801,20 +801,8 @@ def publish_create(
     parser.set_defaults(func=action)
 
 
-def publish_drop(parser: argparse.ArgumentParser) -> None:
-    """configure 'publish drop' subcommand"""
-
-    parser.add_argument(
-        "storage",
-        metavar="<storage>",
-        help="Storage type of a publish to drop",
-    )
-
-    parser.add_argument(
-        "prefix",
-        metavar="<prefix>",
-        help="prefix of a publish to drop",
-    )
+def publish_update(parser: argparse.ArgumentParser) -> None:
+    """configure 'publish update' subcommand"""
 
     parser.add_argument(
         "distribution",
@@ -823,8 +811,66 @@ def publish_drop(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
+        "endpoint_and_prefix",
+        metavar="[<endpoint>:]<prefix>",
+        nargs="?",
+        default="",
+        help="""
+        <endpoint> - publishing endpoint, if not specified, it would default to empty endpoint (local file system).
+        <prefix> - publishing prefix, if not specified, it would default to empty prefix (.)
+        """,
+    )
+
+    parser.add_argument(
         "-f",
-        "--force",
+        "--force-overwrite",
+        action="store_true",
+        help="overwrite packages files in the pool even if content is different",
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        distribution: str,
+        endpoint_and_prefix: str,
+        force_overwrite: bool,
+        **_unused: Any,
+    ) -> None:
+        storage, _, prefix = endpoint_and_prefix.rpartition(":")
+        publish = aptly.publish_update(
+            force_overwrite=force_overwrite,
+            distribution=distribution,
+            storage=storage,
+            prefix=prefix,
+        )
+        print_publishes([publish])
+
+    parser.set_defaults(func=action)
+
+
+def publish_drop(parser: argparse.ArgumentParser) -> None:
+    """configure 'publish drop' subcommand"""
+
+    parser.add_argument(
+        "distribution",
+        metavar="<distribution>",
+        help="distribution of a publish to drop",
+    )
+
+    parser.add_argument(
+        "endpoint_and_prefix",
+        metavar="[<endpoint>:]<prefix>",
+        nargs="?",
+        default="",
+        help="""
+        <endpoint> - publishing endpoint, if not specified, it would default to empty endpoint (local file system).
+        <prefix> - publishing prefix, if not specified, it would default to empty prefix (.)
+        """,
+    )
+
+    parser.add_argument(
+        "-f",
+        "--force-drop",
         action="store_true",
         help="force published repository removal even if component cleanup fails",
     )
@@ -832,13 +878,15 @@ def publish_drop(parser: argparse.ArgumentParser) -> None:
     def action(
         *,
         aptly: Client,
-        storage: str,
-        prefix: str,
         distribution: str,
-        force: bool,
+        endpoint_and_prefix: str,
+        force_drop: bool,
         **_unused: Any,
     ) -> None:
-        pass
+        storage, _, prefix = endpoint_and_prefix.rpartition(":")
+        aptly.publish_drop(
+            distribution=distribution, storage=storage, prefix=prefix, force=force_drop
+        )
 
     parser.set_defaults(func=action)
 
@@ -1020,6 +1068,14 @@ def parse_args() -> argparse.Namespace:
             help="publish local repository directly, bypassing snapshot creation step",
         ),
         False,
+    )
+
+    publish_update(
+        publish_actions.add_parser(
+            "update",
+            description="re-publishe (update) published local repository",
+            help="re-publishe (update) published local repository",
+        )
     )
 
     publish_drop(
