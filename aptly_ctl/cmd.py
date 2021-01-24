@@ -606,6 +606,149 @@ def repo_remove(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def snapshot_create(parser: argparse.ArgumentParser) -> None:
+    """configure 'snapshot create'"""
+    parser.add_argument(
+        "snapshot_name", metavar="<snapshot name>", help="snapshot name"
+    )
+    parser.add_argument(
+        "-r",
+        "--repo-name",
+        help="""create from local repo.
+        If absent, empty snapshot is created""",
+    )
+    parser.add_argument(
+        "-d",
+        "--description",
+        dest="snapshot_desc",
+        help="description string for a snapshot",
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        snapshot_name: str,
+        repo_name: str,
+        snapshot_desc: str,
+        **_unused: Any,
+    ) -> None:
+        if repo_name:
+            try:
+                snapshot = aptly.snapshot_create_from_repo(
+                    repo_name, snapshot_name, snapshot_desc
+                )
+            except AptlyApiError as exc:
+                if exc.status in [400, 404]:
+                    raise AptlyCtlError(
+                        f"Failed to create snapshot '{snapshot_name}'"
+                    ) from exc
+                raise
+        else:
+            try:
+                snapshot = aptly.snapshot_create_from_package_keys(
+                    snapshot_name, keys=[], description=snapshot_desc
+                )
+            except AptlyApiError as exc:
+                if exc.status == 400:
+                    raise AptlyCtlError(
+                        f"Failed to create snapshot '{snapshot_name}'"
+                    ) from exc
+                raise
+        print_table([list(snapshot)], header=list(snapshot._fields))
+
+    parser.set_defaults(func=action)
+
+
+def snapshot_edit(parser: argparse.ArgumentParser) -> None:
+    """configure 'snapshot edit'"""
+    parser.add_argument(
+        "snapshot_name", metavar="<snapshot name>", help="snapshot name"
+    )
+    parser.add_argument(
+        "new_snapshot_name",
+        nargs="?",
+        default="",
+        metavar="<new snapshot name>",
+        help="snapshot name",
+    )
+    parser.add_argument(
+        "-d",
+        "--description",
+        default="",
+        dest="snapshot_desc",
+        help="set new description string for a snapshot",
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        snapshot_name: str,
+        new_snapshot_name: str,
+        snapshot_desc: str,
+        **_unused: Any,
+    ) -> None:
+        try:
+            snapshot = aptly.snapshot_edit(
+                snapshot_name, new_snapshot_name, snapshot_desc
+            )
+        except AptlyApiError as exc:
+            if exc.status in [404, 409]:
+                raise AptlyCtlError(
+                    f"Failed to edit snapshot '{snapshot_name}'"
+                ) from exc
+            raise
+        print_table([list(snapshot)], header=list(snapshot._fields))
+
+    parser.set_defaults(func=action)
+
+
+def snapshot_list(parser: argparse.ArgumentParser) -> None:
+    """configure 'snapshot list' subcommand"""
+
+    def action(
+        *,
+        aptly: Client,
+        **_unused: Any,
+    ) -> None:
+        snapshots = aptly.snapshot_list()
+        if not snapshots:
+            print("No snapshots!")
+            return
+        header = list(snapshots[0]._fields)
+        table = [list(snapshot) for snapshot in sorted(snapshots)]
+        print_table(table, header=header)
+
+    parser.set_defaults(func=action)
+
+
+def snapshot_drop(parser: argparse.ArgumentParser) -> None:
+    """configure 'snapshot drop' subcommand"""
+    parser.add_argument(
+        "snapshot_name", metavar="<snapshot name>", help="snapshot name"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="delete snapshot even if it's pointed by another snapshot",
+    )
+
+    def action(
+        *, aptly: Client, snapshot_name: str, force: bool, **_unused: Any
+    ) -> None:
+        # TODO add ability to delete multiple snapshots
+        try:
+            aptly.snapshot_delete(snapshot_name, force)
+        except AptlyApiError as exc:
+            if exc.status in [404, 409]:
+                raise AptlyCtlError(
+                    f"Failed to delete snapshot '{snapshot_name}'"
+                ) from exc
+            raise
+        print(f"Deleted snapshot '{snapshot_name}'")
+
+    parser.set_defaults(func=action)
+
+
 def print_publishes(pubs: Iterable[Publish]) -> None:
     """print a list of Publish instances to stdout"""
     leading_fields = ["source_kind", "distribution", "prefix", "storage"]
@@ -1034,6 +1177,45 @@ def parse_args() -> argparse.Namespace:
             "remove",
             description="remove packages from local repo",
             help="remove packages from local repo",
+        )
+    )
+
+    # snapshot subcommand
+    snapshot_subcommand = subcommands.add_parser("snapshot", help="manage snapshots")
+
+    snapshot_actions = snapshot_subcommand.add_subparsers(
+        dest="action", metavar="<action>", required=True
+    )
+
+    snapshot_create(
+        snapshot_actions.add_parser(
+            "create",
+            description="create snapshots from local repos",
+            help="create snapshots from local repos",
+        )
+    )
+
+    snapshot_edit(
+        snapshot_actions.add_parser(
+            "edit",
+            aliases=["rename"],
+            description="Change snapshot's description or name",
+            help="Change snapshot's description or name",
+        )
+    )
+
+    snapshot_list(
+        snapshot_actions.add_parser(
+            "list", description="list snapshots", help="list snapshots"
+        )
+    )
+
+    snapshot_drop(
+        snapshot_actions.add_parser(
+            "drop",
+            aliases=["delete"],
+            description="delete snapshots",
+            help="delete snapshots",
         )
     )
 
