@@ -243,7 +243,7 @@ def package_search(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "queries",
-        metavar="[ query ... ]",
+        metavar="query",
         nargs="*",
         default=("",),
         help="package queries. Multiple queries are ORed. For query syntax see "
