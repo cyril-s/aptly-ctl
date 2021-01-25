@@ -1100,6 +1100,7 @@ def parse_args() -> argparse.Namespace:
     version(
         subcommands.add_parser(
             "version",
+            aliases=["ver"],
             description="show aptly server version",
             help="show aptly server version",
         )
@@ -1107,7 +1108,7 @@ def parse_args() -> argparse.Namespace:
 
     # package subcommand
     package_subcommand = subcommands.add_parser(
-        "package", help="search packages and show info about them"
+        "package", aliases=["pkg"], help="search packages and show info about them"
     )
 
     package_actions = package_subcommand.add_subparsers(
@@ -1181,7 +1182,9 @@ def parse_args() -> argparse.Namespace:
     )
 
     # snapshot subcommand
-    snapshot_subcommand = subcommands.add_parser("snapshot", help="manage snapshots")
+    snapshot_subcommand = subcommands.add_parser(
+        "snapshot", aliases=["snap"], help="manage snapshots"
+    )
 
     snapshot_actions = snapshot_subcommand.add_subparsers(
         dest="action", metavar="<action>", required=True
@@ -1221,7 +1224,9 @@ def parse_args() -> argparse.Namespace:
 
     # publish subcommand
     publish_subcommand = subcommands.add_parser(
-        "publish", help="create publishes from local repos or snapshots and manage them"
+        "publish",
+        aliases=["pub"],
+        help="create publishes from local repos or snapshots and manage them",
     )
 
     publish_actions = publish_subcommand.add_subparsers(
