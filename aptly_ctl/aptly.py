@@ -889,7 +889,7 @@ def search(
     snapshots = aptly.snapshot_list()
     stores = repos + snapshots
     if store_filter:
-        stores = filter(lambda s: store_filter.search(s), stores)
+        stores = filter(lambda s: store_filter.search(s.name), stores)
     tasks = [(store, query) for store in stores for query in queries]
 
     def worker(
