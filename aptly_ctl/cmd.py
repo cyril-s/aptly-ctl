@@ -991,6 +991,84 @@ def publish_update(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def publish_switch(parser: argparse.ArgumentParser) -> None:
+    """configure 'publish switch' subcommand"""
+
+    parser.add_argument(
+        "distribution",
+        metavar="<distribution>",
+        help="distribution of a publish to drop",
+    )
+
+    parser.add_argument(
+        "endpoint_and_prefix",
+        metavar="[<endpoint>:]<prefix>",
+        nargs="?",
+        default="",
+        help="""
+       <endpoint> - publishing endpoint, if not specified, it would default to empty endpoint (local file system).
+       <prefix> - publishing prefix, if not specified, it would default to empty prefix (.)
+       """,
+    )
+
+    parser.add_argument(
+        "new_snapshot_names",
+        metavar="<new snapshot name>",
+        nargs="+",
+        help="snapshot name that snould be re-published",
+    )
+
+    parser.add_argument(
+        "-c",
+        "--component",
+        metavar="<component>[,<component>,...]",
+        help="""when switching published snapshots for multiple component repositories
+        any subset of snapshots could be updated,
+        they should be listed in this argument, separated by comas. For single component repo
+        you can skip this argument
+        """,
+    )
+
+    parser.add_argument(
+        "-f",
+        "--force-overwrite",
+        action="store_true",
+        help="overwrite packages files in the pool even if content is different",
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        distribution: str,
+        endpoint_and_prefix: str,
+        new_snapshot_names: List[str],
+        component: str,
+        force_overwrite: bool,
+        **_unused: Any,
+    ) -> None:
+        storage, _, prefix = endpoint_and_prefix.rpartition(":")
+        comps = component.split(",") if component else ["main"]
+
+        if len(comps) != len(new_snapshot_names):
+            raise AptlyCtlError(
+                "For multiple component publishes specify component for each updated snapshot"
+            )
+
+        sources = [Source(name, comp) for name, comp in zip(new_snapshot_names, comps)]
+
+        publish = aptly.publish_update(
+            force_overwrite=force_overwrite,
+            distribution=distribution,
+            storage=storage,
+            prefix=prefix,
+            snapshots=sources,
+        )
+
+        print_publishes([publish])
+
+    parser.set_defaults(func=action)
+
+
 def publish_drop(parser: argparse.ArgumentParser) -> None:
     """configure 'publish drop' subcommand"""
 
@@ -1260,8 +1338,16 @@ def parse_args() -> argparse.Namespace:
     publish_update(
         publish_actions.add_parser(
             "update",
-            description="re-publishe (update) published local repository",
-            help="re-publishe (update) published local repository",
+            description="re-publish (update) published local repository",
+            help="re-publish (update) published local repository",
+        )
+    )
+
+    publish_switch(
+        publish_actions.add_parser(
+            "switch",
+            description="switch in-place published repository with new snapshot contents",
+            help="switch in-place published repository with new snapshot contents",
         )
     )
 
