@@ -5,7 +5,10 @@ from math import ceil
 
 
 def rotate(
-    key_fmt: str, sort_func: Callable[[Any], Any], n: int, seq: Iterable,
+    key_fmt: str,
+    sort_func: Callable[[Any], Any],
+    n: int,
+    seq: Iterable,
 ) -> List[Any]:
     """
     Returns items in seq to rotate according to configured policy.
@@ -59,6 +62,17 @@ def timedelta_pretty(delta: timedelta) -> str:
     if delta < timedelta():
         out.append("-")
     return "".join(reversed(out))
+
+
+def size_pretty(size: int) -> str:
+    """Convert size in bytes into human readable string"""
+    suf = "bytes"
+    for next_suf in ["KiB", "MiB", "GiB"]:
+        if size / 1024 < 1.0:
+            return f"{size:.0f} {suf}"
+        size /= 1024
+        suf = next_suf
+    return f"{size:.0f} {suf}"
 
 
 def format_table(

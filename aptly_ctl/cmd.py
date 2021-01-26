@@ -18,6 +18,7 @@ import json
 import sys
 import os
 from datetime import datetime
+import string
 import urllib3.exceptions
 from aptly_ctl import VERSION
 from aptly_ctl.aptly import (
@@ -33,7 +34,7 @@ from aptly_ctl.aptly import (
 from aptly_ctl.config import Config, parse_override_dict
 from aptly_ctl.debian import Version
 from aptly_ctl.exceptions import AptlyCtlError, AptlyApiError
-from aptly_ctl.util import print_table
+from aptly_ctl.util import print_table, size_pretty
 
 log = logging.getLogger(__name__)
 
@@ -257,10 +258,23 @@ def package_search(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-o",
         "--out-columns",
-        dest="out_columns_str",
+        dest="base_out_columns_str",
         metavar="OUT_COLUMNS",
-        default="store_type,store_name,package_name,package_version,package_key_quoted",
-        help="output columns",
+        default="store_type,store_name,package_name,package_version,package_dir_ref,package_key_quoted",
+        help="""output columns. Available columns: store_type, store_name,
+        package_name, package_arch, package_version, package_hash,
+        package_dir_ref, package_key, package_key_quoted.
+        Also every field from output of 'package show' is also available
+        (note that they start with a capital letter)"
+        """,
+    )
+    parser.add_argument(
+        "-O",
+        "--extra-out-columns",
+        dest="extra_out_columns_str",
+        metavar="EXTRA_OUT_COLUMNS",
+        default="",
+        help="output columns to append to a default set",
     )
     parser.add_argument(
         "-f",
@@ -274,6 +288,12 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         "--sort-reverse",
         action="store_true",
         help="sort in descending order",
+    )
+
+    parser.add_argument(
+        "--no-header",
+        action="store_true",
+        help="do not print header of the output table",
     )
 
     def build_out_row(
@@ -298,8 +318,19 @@ def package_search(parser: argparse.ArgumentParser) -> None:
                 row.append(package.version)
             elif col == "package_hash":
                 row.append(package.files_hash)
+            elif col == "package_dir_ref":
+                row.append(package.dir_ref)
+            elif col == "Installed-Size":
+                row.append(size_pretty(int(package.fields[col]) * 1024))
+            elif col == "Size":
+                row.append(size_pretty(int(package.fields[col])))
+            elif col[0] in string.ascii_uppercase:
+                try:
+                    row.append(package.fields[col])
+                except KeyError:
+                    raise AptlyCtlError("Unknown output column name: " + col)
             else:
-                raise ValueError("Unknown output column name: " + col)
+                raise AptlyCtlError("Unknown output column name: " + col)
         return row
 
     def action(
@@ -307,24 +338,31 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         aptly: Client,
         queries: Iterable[str],
         with_deps: bool,
-        out_columns_str: str,
+        base_out_columns_str: str,
+        extra_out_columns_str: str,
         max_workers: int,
         store_filter: Optional[Pattern],
         sort_reverse: bool,
         assume_tty: bool,
+        no_header: bool,
         **_unused: Any,
     ) -> None:
+        base_out_columns = list(filter(None, base_out_columns_str.split(",")))
+        extra_out_columns = list(filter(None, extra_out_columns_str.split(",")))
+        out_columns = base_out_columns + extra_out_columns
+        details = any(filter(lambda col: col[0] in string.ascii_uppercase, out_columns))
+
         result, errors = search(
             aptly,
             queries,
             with_deps,
+            details,
             max_workers=max_workers,
             store_filter=store_filter,
         )
         if not sys.stdout.isatty() and not assume_tty:
             print(PipeMessage(result).to_json())
             return
-        out_columns = out_columns_str.split(",")
         table = [
             build_out_row(out_columns, store, package)
             for store, packages in result
@@ -334,7 +372,10 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         for index in range(len(out_columns) - 1, -1, -1):
             # pylint: disable=cell-var-from-loop
             table.sort(key=lambda row: row[index], reverse=sort_reverse)
-        print_table(table, out_columns)
+        if no_header:
+            print_table(table)
+        else:
+            print_table(table, out_columns)
         for error in errors:
             log.error(error)
         if errors:
