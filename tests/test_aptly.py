@@ -563,7 +563,7 @@ class TestAptlyClient:
 
     def test_publish_list(self, aptly: Client) -> None:
         repo = aptly.repo_create(rand("test"))
-        sources = [Source(repo.name, "main")]
+        sources = (Source(repo.name, "main"),)
         pub = aptly.publish_create(
             source_kind="local",
             sources=sources,
@@ -677,6 +677,26 @@ class TestAptlyClient:
         assert updated_pub.prefix == "."
         assert updated_pub.source_kind == "snapshot"
         assert sorted(updated_pub.sources) == sorted(sources_new)
+
+    def test_publish_hashable(self, aptly: Client) -> None:
+        repo = aptly.repo_create(rand("test"))
+        sources = (Source(repo.name, "main"),)
+        pub1 = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="stretch",
+            architectures=["amd64"],
+        )
+        pub2 = aptly.publish_create(
+            source_kind="local",
+            sources=sources,
+            distribution="buster",
+            architectures=["amd64"],
+        )
+        pub_set = {pub1, pub1, pub2}
+        assert len(pub_set) == 2
+        assert pub1 in pub_set
+        assert pub2 in pub_set
 
     def test_package_show(
         self, aptly: Client, packages_simple: List[Tuple[Package, PackageFileInfo]]

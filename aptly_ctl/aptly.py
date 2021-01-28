@@ -221,16 +221,19 @@ class Source(NamedTuple):
     def __str__(self) -> str:
         return f"{self.name} ({self.component})"
 
+    def __hash__(self) -> int:
+        return hash((self.name, self.component))
+
 
 class Publish(NamedTuple):
     """Represents publish in aptly"""
 
     source_kind: str
-    sources: Iterable[Source]
+    sources: Tuple[Source, ...]
     storage: str = ""
     prefix: str = ""
     distribution: str = ""
-    architectures: Iterable[str] = ()
+    architectures: Tuple[str, ...] = ()
     label: str = ""
     origin: str = ""
     not_automatic: bool = False
@@ -240,10 +243,10 @@ class Publish(NamedTuple):
     @classmethod
     def from_api_response(cls, resp: Dict[str, Any]) -> "Publish":
         """Create publish instance from API json response"""
-        sources = [
+        sources = tuple(
             Source(source["Name"], source.get("Component", None))
             for source in resp["Sources"]
-        ]
+        )
         kwargs = {"sources": sources}  # type: Dict[str, Any]
         for key, tgt_key in [
             ("SourceKind", "source_kind"),
@@ -317,6 +320,9 @@ class Publish(NamedTuple):
 
     def __str__(self) -> str:
         return f"{self.full_prefix}/{self.distribution}"
+
+    def __hash__(self) -> int:
+        return hash((field for field in self))
 
 
 class FilesReport(NamedTuple):
