@@ -12,3 +12,6 @@ sdist/
 *.swp
 .tox/
 .mypy_cache
+
+test_packages/
+snippet*.py
