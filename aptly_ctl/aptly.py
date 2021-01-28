@@ -73,6 +73,15 @@ class PackageFileInfo(NamedTuple):
     sha256: str
 
 
+class InvalidPackageKey(Exception):
+    """
+    Exception that indicates invalid package key
+    """
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"Invalid package key '{key}'")
+
+
 class Package(NamedTuple):
     """Represents package in aptly or in local filesystem"""
 
@@ -98,7 +107,7 @@ class Package(NamedTuple):
         """Create from instance of aptly key"""
         match = KEY_REGEXP.match(key)
         if not match:
-            raise ValueError("invalid package key '{}'".format(key))
+            raise InvalidPackageKey(key)
         prefix, arch, name, version_str, files_hash = match.groups()
         version = Version(version_str)
         return cls(
@@ -886,7 +895,7 @@ def search(
     List of erros is a list of exception encountered during the search.
 
     Keyword arguments:
-        queries -- list of search queries. By default lists all packages
+        queries -- list of search queries and/or package keys. By default lists all packages
         with_deps -- return dependencies of packages matched in query
         details -- fill in 'fields' attribute of returned Package instances
         max_workers -- max number of threads
@@ -903,11 +912,23 @@ def search(
     def worker(
         store: Union[Repo, Snapshot], query: str
     ) -> Tuple[Union[Repo, Snapshot], List[Package]]:
+        try:
+            pkg = Package.from_key(query)
+            query = pkg.dir_ref
+        except InvalidPackageKey:
+            pkg = None
+
         if isinstance(store, Repo):
-            return store, aptly.repo_search(store.name, query, with_deps, details)
-        if isinstance(store, Snapshot):
-            return store, aptly.snapshot_search(store.name, query, with_deps, details)
-        raise TypeError("Invalid store type of {}: {}".format(store, type(store)))
+            pkgs = aptly.repo_search(store.name, query, with_deps, details)
+        elif isinstance(store, Snapshot):
+            pkgs = aptly.snapshot_search(store.name, query, with_deps, details)
+        else:
+            raise TypeError("Invalid store type of {}: {}".format(store, type(store)))
+
+        if pkg:
+            pkgs = list(p for p in pkgs if p.files_hash == pkg.files_hash)
+
+        return store, pkgs
 
     futures = []
     result = []

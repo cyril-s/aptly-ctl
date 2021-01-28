@@ -4,7 +4,7 @@ from typing import Iterator, Tuple, List
 import os.path
 import aptly_ctl.aptly
 from datetime import datetime
-from aptly_ctl.aptly import Client
+from aptly_ctl.aptly import Client, search
 from aptly_ctl.aptly import Repo, Snapshot, Source, Package, PackageFileInfo
 from aptly_ctl.exceptions import AptlyApiError
 from aptly_ctl.debian import Version
@@ -717,3 +717,28 @@ class TestAptlyClient:
     def test_version(self, aptly: Client) -> None:
         version = aptly.version()
         assert isinstance(version, str)
+
+    def test_search_by_package_key(
+        self,
+        aptly: Client,
+        packages_conflict: List[Tuple[Package, PackageFileInfo]],
+    ) -> None:
+        assert len(packages_conflict) == 2
+        pkgs = packages_conflict
+        directory = rand("dir")
+        aptly.files_upload([file_info.origpath for _, file_info in pkgs], directory)
+        repo1 = aptly.repo_create(rand("repo"))
+        repo2 = aptly.repo_create(rand("repo"))
+
+        report1 = aptly.repo_add_packages(repo1.name, directory, pkgs[0][1].filename)
+        assert report1.added
+        assert not report1.failed
+        report2 = aptly.repo_add_packages(repo2.name, directory, pkgs[1][1].filename)
+        assert report2.added
+        assert not report2.failed
+
+        result, errors = search(aptly, [pkgs[0][0].key])
+        assert not errors
+        assert len(result) == 1
+        assert result[0][0].name == repo1.name
+        assert result[0][1][0].files_hash == pkgs[0][0].files_hash
