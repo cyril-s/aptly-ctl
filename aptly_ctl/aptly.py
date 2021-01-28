@@ -180,6 +180,10 @@ class Package(NamedTuple):
         pkg = cls.from_key(resp["Key"])
         return pkg._replace(fields=resp)
 
+    def __hash__(self) -> int:
+        # no need to include fields since files_hash calculation involves control file fields
+        return hash((self.name, self.version, self.arch, self.prefix, self.files_hash))
+
 
 class Repo(NamedTuple):
     """Represents local repo in aptly"""

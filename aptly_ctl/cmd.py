@@ -30,6 +30,7 @@ from aptly_ctl.aptly import (
     PackageFileInfo,
     Publish,
     Source,
+    InvalidPackageKey,
 )
 from aptly_ctl.config import Config, parse_override_dict
 from aptly_ctl.debian import Version
@@ -192,48 +193,73 @@ def package_show(parser: argparse.ArgumentParser) -> None:
     """configure 'package show' subcommand"""
 
     parser.add_argument(
-        "keys",
-        metavar="<key>",
-        action=SetOrReadPipeMessage,
-        nargs="*",
-        help="package key",
+        "keys_or_queries",
+        metavar="<package key or query>",
+        nargs="+",
+        help="package key or query",
     )
 
     first_fileds = ["Package", "Version", "Architecture"]
     last_fields = ["Description"]
     skip_fields = set(first_fileds) | set(last_fields) | {"Key", "ShortKey"}
 
+    def print_package(package: Package) -> None:
+        print('"', package.key, '"', sep="")
+        for field in first_fileds:
+            print("   ", field, ":", package.fields[field])
+        for field in sorted(package.fields.keys()):
+            if field in skip_fields:
+                continue
+            print("   ", field, ":", package.fields[field])
+        for field in last_fields:
+            print("   ", field, ":", package.fields[field])
+
     def action(
-        *, aptly: Client, keys: Union[Iterable[str], PipeMessage], **_unused: Any
+        *,
+        aptly: Client,
+        max_workers: int,
+        keys_or_queries: Iterable[str],
+        **_unused: Any,
     ) -> None:
-        missing_pkgs = False
-        if isinstance(keys, PipeMessage):
-            msg = keys
-            keys = {package.key for _, packages in msg.message for package in packages}
+        keys = []
+        queries = []
+        for key_or_query in keys_or_queries:
+            try:
+                Package.from_key(key_or_query)
+                keys.append(key_or_query)
+            except InvalidPackageKey:
+                queries.append(key_or_query)
+
+        pkgs = set()
+        err_exit = False
         for key in keys:
             try:
-                package = aptly.package_show(key)
+                pkgs.add(aptly.package_show(key))
             except AptlyApiError as exc:
                 if exc.status == 404:
                     log.error("Package with key '%s' wasn't found", key)
-                    log.debug("Printing traceback for error above", exc_info=True)
-                    missing_pkgs = True
+                    err_exit = True
                     continue
                 raise
-            if not package.fields:
-                raise RuntimeError(
-                    "'fileds' attribute of Package object was not present"
-                )
-            print('"', package.key, '"', sep="")
-            for field in first_fileds:
-                print("   ", field, ":", package.fields[field])
-            for field in sorted(package.fields.keys()):
-                if field in skip_fields:
-                    continue
-                print("   ", field, ":", package.fields[field])
-            for field in last_fields:
-                print("   ", field, ":", package.fields[field])
-        if missing_pkgs:
+
+        if queries:
+            result, errors = search(
+                aptly,
+                queries,
+                details=True,
+                max_workers=max_workers,
+            )
+            for _, packages in result:
+                for package in packages:
+                    pkgs.add(package)
+            for error in errors:
+                log.error(error)
+                err_exit = True
+
+        for pkg in pkgs:
+            print_package(pkg)
+
+        if err_exit:
             raise AptlyCtlError("Some packages were not found")
 
     parser.set_defaults(func=action)
