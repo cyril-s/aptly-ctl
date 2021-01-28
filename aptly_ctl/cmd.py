@@ -51,94 +51,6 @@ def regex(pattern: str) -> re.Pattern:
         raise argparse.ArgumentTypeError("Invalid regex '{}': {}".format(pattern, exc))
 
 
-class PipeMessage(NamedTuple):
-    """Message that is passsed in pipe between aptly-ctl instances"""
-
-    message: List[Tuple[Union[Repo, Snapshot], List[Package]]]
-
-    def to_json(self) -> str:
-        """Serialize to json"""
-        msg = []
-        for store, packages in self.message:
-            if isinstance(store, Snapshot):
-                store_raw: Dict[str, Union[str, List[str]]] = {
-                    "type": "Snapshot",
-                    "name": store.name,
-                    "description": store.description,
-                    "created_at": store.created_at.isoformat()
-                    if store.created_at
-                    else "",
-                }
-            elif isinstance(store, Repo):
-                store_raw = {
-                    "type": "Repo",
-                    "name": store.name,
-                    "comment": store.comment,
-                    "default_distribution": store.default_distribution,
-                    "default_component": store.default_component,
-                }
-            else:
-                raise TypeError("Invalid store type: " + str(type(store)))
-            store_raw["packages"] = [package.key for package in packages]
-            msg.append(store_raw)
-        return json.dumps(msg)
-
-    @classmethod
-    def from_json(cls, msg: str) -> "PipeMessage":
-        """Build PipeMessage from json"""
-        message = []
-        stores_raw = json.loads(msg)
-        for store_raw in stores_raw:
-            if store_raw["type"] == "Snapshot":
-                store: Union[Repo, Snapshot] = Snapshot(
-                    name=store_raw["name"],
-                    description=store_raw["description"],
-                    created_at=datetime.fromisoformat(store_raw["created_at"])
-                    if store_raw["created_at"]
-                    else None,
-                )
-            elif store_raw["type"] == "Repo":
-                store = Repo(
-                    name=store_raw["name"],
-                    comment=store_raw["comment"],
-                    default_distribution=store_raw["default_distribution"],
-                    default_component=store_raw["default_component"],
-                )
-            else:
-                raise ValueError(
-                    "store "
-                    + store_raw["name"]
-                    + " has invalid type "
-                    + store_raw["type"]
-                )
-            packages = [Package.from_key(key) for key in store_raw["packages"]]
-            message.append((store, packages))
-        return cls(message)
-
-
-class SetOrReadPipeMessage(argparse.Action):  # pylint: disable=too-few-public-methods
-    """argparse action which sets argument value as usual if it is present
-    or tries to read it from a PipeMessage supplied from the stdin if is is not a tty"""
-
-    def __call__(self, parser, namespace, values, option_string=None):  # type: ignore
-        if values:
-            setattr(namespace, self.dest, values)
-            return
-        if not sys.stdin.isatty():
-            try:
-                msg = PipeMessage.from_json(sys.stdin.read())
-            except json.JSONDecodeError as exc:
-                raise argparse.ArgumentError(
-                    self, "failed to decode pipe message from stdin: " + str(exc)
-                )
-            setattr(namespace, self.dest, msg)
-            return
-        raise argparse.ArgumentError(
-            self,
-            "arguments were not supplied neither from the command line nor from the stdin!",
-        )
-
-
 def update_dependent_publishes(
     aptly: Client,
     repo_names: Container[str],
@@ -369,7 +281,6 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         max_workers: int,
         store_filter: Optional[Pattern],
         sort_reverse: bool,
-        assume_tty: bool,
         no_header: bool,
         **_unused: Any,
     ) -> None:
@@ -386,9 +297,6 @@ def package_search(parser: argparse.ArgumentParser) -> None:
             max_workers=max_workers,
             store_filter=store_filter,
         )
-        if not sys.stdout.isatty() and not assume_tty:
-            print(PipeMessage(result).to_json())
-            return
         table = [
             build_out_row(out_columns, store, package)
             for store, packages in result
@@ -602,7 +510,6 @@ def repo_drop(parser: argparse.ArgumentParser) -> None:
 
     def action(*, aptly: Client, repo_name: str, force: bool, **_unused: Any) -> None:
         # TODO add ability to delete multiple repos
-        # TODO read repos to delete from pipe message
         try:
             aptly.repo_delete(repo_name, force)
         except AptlyApiError as exc:
@@ -1318,14 +1225,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=5,
         help="number of worker threads for concurrent requests",
-    )
-
-    parser.add_argument(
-        "-a",
-        "--assume-tty",
-        action="store_true",
-        help="assume stdout is always a tty. "
-        "This disables json output when redirecting to a pipe/file",
     )
 
     subcommands = parser.add_subparsers(
