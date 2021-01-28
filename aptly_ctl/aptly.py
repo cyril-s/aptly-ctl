@@ -877,6 +877,7 @@ def search(
     details: bool = False,
     max_workers: int = 5,
     store_filter: Pattern = None,
+    search_snapshots: bool = True,
 ) -> Tuple[List[Tuple[Union[Repo, Snapshot], List[Package]]], List[AptlyApiError]]:
     """
     Search all queries in aptly local repos and snapshots in parallel
@@ -890,9 +891,10 @@ def search(
         details -- fill in 'fields' attribute of returned Package instances
         max_workers -- max number of threads
         store_filter -- regex to filter Repo and Snapshot instances by name
+        search_snapshots -- search snapshots as well, True by default
     """
     repos = aptly.repo_list()
-    snapshots = aptly.snapshot_list()
+    snapshots = aptly.snapshot_list() if search_snapshots else []
     stores = repos + snapshots
     if store_filter:
         stores = filter(lambda s: store_filter.search(s.name), stores)

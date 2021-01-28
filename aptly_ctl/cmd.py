@@ -144,13 +144,13 @@ def update_dependent_publishes(
     dry_run: bool,
 ) -> None:
     """Find and update publishes, that were created from local repos, listed in repo_names argument"""
-    publishes = []
+    publishes = set()
     for publish in aptly.publish_list():
         if publish.source_kind != "local":
             continue
         for source in publish.sources:
             if source.name in repo_names:
-                publishes.append(publish)
+                publishes.add(publish)
 
     if not publishes:
         return
@@ -380,6 +380,97 @@ def package_search(parser: argparse.ArgumentParser) -> None:
             log.error(error)
         if errors:
             raise AptlyCtlError("Package search finished with errors")
+
+    parser.set_defaults(func=action)
+
+
+def package_remove(parser: argparse.ArgumentParser) -> None:
+    """configure 'package remove' subcommand"""
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="just show packages to be removed",
+    )
+    parser.add_argument(
+        "-U",
+        "--update-publishes",
+        action="store_true",
+        help="update dependent publishes",
+    )
+    parser.add_argument(
+        "-f",
+        "--repo-filter",
+        metavar="REGEXP",
+        type=regex,
+        help="filter local repos where packages will be removed",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        dest="skip_confirm",
+        action="store_true",
+        help="don't ask for confirmation",
+    )
+    parser.add_argument(
+        "package_queries", nargs="+", metavar="<package_query>", help="package query"
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        max_workers: int,
+        dry_run: bool,
+        update_publishes: bool,
+        repo_filter: Optional[Pattern],
+        skip_confirm: bool,
+        package_queries: List[str],
+        **_unused: Any,
+    ) -> None:
+        result, errors = search(
+            aptly,
+            package_queries,
+            max_workers=max_workers,
+            store_filter=repo_filter,
+            search_snapshots=False,
+        )
+
+        if not result and not errors:
+            print("Nothing to remove")
+            return
+
+        header = [
+            "repo name",
+            "package to be removed",
+            "package version",
+            "package hash",
+        ]
+        table = [
+            [repo.name, package.name, package.version, package.files_hash]
+            for repo, packages in result
+            for package in packages
+        ]
+        table.sort()
+        print_table(table, header)
+
+        for error in errors:
+            log.error(error)
+        if errors:
+            raise AptlyCtlError("Package search finished with errors")
+
+        if not skip_confirm and not dry_run:
+            answer = input("Remove listed packages? [y/N]: ")
+            if answer.lower() not in ["y", "yes"]:
+                print("Package removal was canceled")
+                return
+
+        if not dry_run:
+            for repo, packages in result:
+                aptly.repo_delete_packages_by_key(repo.name, [p.key for p in packages])
+
+        if update_publishes:
+            repo_names = [repo.name for repo, _ in result]
+            update_dependent_publishes(aptly, repo_names, dry_run)
 
     parser.set_defaults(func=action)
 
@@ -1239,6 +1330,14 @@ def parse_args() -> argparse.Namespace:
     package_search(
         package_actions.add_parser(
             "search", description="search packages", help="search packages"
+        )
+    )
+
+    package_remove(
+        package_actions.add_parser(
+            "remove",
+            description="remove packages from all local repos",
+            help="remove packages from all local repos",
         )
     )
 
