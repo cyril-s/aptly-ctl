@@ -350,7 +350,7 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         base_out_columns = list(filter(None, base_out_columns_str.split(",")))
         extra_out_columns = list(filter(None, extra_out_columns_str.split(",")))
         out_columns = base_out_columns + extra_out_columns
-        details = any(filter(lambda col: col[0] in string.ascii_uppercase, out_columns))
+        details = any(col[0] in string.ascii_uppercase for col in out_columns)
 
         result, errors = search(
             aptly,
