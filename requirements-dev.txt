@@ -1,7 +1,8 @@
 pytest
-tox
 mypy
 twine
 wheel
 pynvim
 black
+flake8
+pylint
