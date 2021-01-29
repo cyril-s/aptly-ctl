@@ -190,8 +190,10 @@ class TestAptlyClient:
             },
         ]:
             repo = Repo(**kwargs)
+            kwargs["repo_name"] = kwargs["name"]
+            del kwargs["name"]
             assert aptly.repo_create(**kwargs) == repo
-            assert aptly.repo_show(kwargs["name"]) == repo
+            assert aptly.repo_show(kwargs["repo_name"]) == repo
 
     def test_repo_list(self, aptly: Client) -> None:
         repos = set()

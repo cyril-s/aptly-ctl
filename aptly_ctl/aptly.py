@@ -34,6 +34,10 @@ DIR_REF_REGEXP = re.compile(r"(\S+?)_(\S+?)_(\w+)")
 
 
 class SigningConfig(NamedTuple):
+    """
+    Holds configuration for publish signing
+    """
+
     skip: bool = False
     batch: bool = True
     gpgkey: Optional[str] = None
@@ -44,6 +48,9 @@ class SigningConfig(NamedTuple):
 
     @property
     def kwargs(self) -> Dict[str, Union[str, bool]]:
+        """
+        Returns dictionary suitable for api request
+        """
         if self.skip:
             return {"Skip": True}
         kwargs = {"Batch": self.batch}  # type: Dict[str, Union[str, bool]]
@@ -64,6 +71,10 @@ DefaultSigningConfig = SigningConfig()
 
 
 class PackageFileInfo(NamedTuple):
+    """
+    Holds info about debian package in a local filesystem
+    """
+
     filename: str
     path: str
     origpath: str
@@ -180,6 +191,9 @@ class Package(NamedTuple):
 
     @classmethod
     def from_api_response(cls, resp: Dict[str, str]) -> "Package":
+        """
+        Build Package instance from json in api response
+        """
         pkg = cls.from_key(resp["Key"])
         return pkg._replace(fields=resp)
 
@@ -283,6 +297,9 @@ class Publish(NamedTuple):
 
     @property
     def sources_dict(self) -> List[Dict[str, str]]:
+        """
+        Get Publish sources as list of dictionaries
+        """
         sources = []
         for source in self.sources:
             if source.component:
@@ -293,6 +310,9 @@ class Publish(NamedTuple):
 
     @property
     def api_params(self) -> Dict[str, Any]:
+        """
+        Return dictionary suitable for api request
+        """
         params = {
             "SourceKind": self.source_kind,
             "Sources": self.sources_dict,
@@ -320,6 +340,9 @@ class Publish(NamedTuple):
 
     @property
     def full_prefix(self) -> str:
+        """
+        Return complete prefix (url path part) for publish
+        """
         prefix = self.prefix if self.prefix else "."
         if not self.storage:
             return prefix
@@ -327,6 +350,9 @@ class Publish(NamedTuple):
 
     @property
     def full_prefix_escaped(self) -> str:
+        """
+        Return complete prefix (url path part) for publish escaped according to aptly rules
+        """
         prefix = self.full_prefix
         if prefix == ".":
             return ":."
@@ -342,13 +368,17 @@ class Publish(NamedTuple):
 
 
 class FilesReport(NamedTuple):
+    """
+    Represents api response on request to add packages to a local repo
+    """
+
     failed: Sequence[str] = ()
     added: Sequence[str] = ()
     removed: Sequence[str] = ()
     warnings: Sequence[str] = ()
 
 
-class Client:
+class Client:  # pylint: disable=too-many-public-methods
     """Aptly API client with more convenient commands"""
 
     files_url_path: ClassVar[str] = "api/files"
@@ -376,6 +406,9 @@ class Client:
     def get_signing_config(
         self, prefix: Optional[str], distribution: Optional[str]
     ) -> SigningConfig:
+        """
+        Get SigningConfig for particular publish
+        """
         if prefix is None:
             prefix = "."
         if distribution is None:
@@ -428,6 +461,9 @@ class Client:
         return resp_data
 
     def files_upload(self, files: Sequence[str], directory: str) -> List[str]:
+        """
+        Upload files to aptly server upload dir
+        """
         url = urljoin(self.url, self.files_url_path, directory)
         fields = {}  # type: Dict[str, Tuple[str, bytes]]
         for fpath in files:
@@ -438,25 +474,37 @@ class Client:
         return cast(List[str], resp)
 
     def files_list(self, directory: str) -> List[str]:
+        """
+        List files on aptly server upload dir
+        """
         url = urljoin(self.url, self.files_url_path, directory)
         resp = self._request("GET", url)
         return cast(List[str], resp)
 
     def files_list_dirs(self) -> List[str]:
+        """
+        List dirs in upload dir on aptly server
+        """
         resp = self._request("GET", urljoin(self.url, self.files_url_path))
         return cast(List[str], resp)
 
     def files_delete_dir(self, directory: str) -> None:
+        """
+        Delete directory on aptly server in upload dir
+        """
         url = urljoin(self.url, self.files_url_path, directory)
         self._request("DELETE", url)
 
     def files_delete_file(self, directory: str, file: str) -> None:
+        """
+        Delete files in upload dir on aptly server
+        """
         url = urljoin(self.url, self.files_url_path, directory, file)
         self._request("DELETE", url)
 
     def repo_create(
         self,
-        name: str,
+        repo_name: str,
         comment: str = "",
         default_distribution: str = "",
         default_component: str = "",
@@ -465,7 +513,7 @@ class Client:
         Creates new local repo
 
         Arguments:
-            name -- local repo name
+            repo_name -- local repo name
             comment -- comment for local repo
             default_distribution -- default distribution. When creating publish
                 from local repo, this attribute is looked up to determine target
@@ -474,7 +522,7 @@ class Client:
                 from local repo, this attribute is looked up to determine target
                 component for this repo if it is not supplied explicitly.
         """
-        body = {"Name": name}
+        body = {"Name": repo_name}
         if comment:
             body["Comment"] = comment
         if default_distribution:
@@ -486,14 +534,14 @@ class Client:
         repo_data = cast(Dict[str, str], repo_data)
         return Repo.from_api_response(repo_data)
 
-    def repo_show(self, name: str) -> Repo:
+    def repo_show(self, repo_name: str) -> Repo:
         """
         Get info about local repo
 
         Arguments:
-            name -- local repo name
+            repo_name -- local repo name
         """
-        url = urljoin(self.url, self.repos_url_path, name)
+        url = urljoin(self.url, self.repos_url_path, repo_name)
         repo_data = self._request("GET", url)
         repo_data = cast(Dict[str, str], repo_data)
         return Repo.from_api_response(repo_data)
@@ -506,7 +554,7 @@ class Client:
 
     def repo_edit(
         self,
-        name: str,
+        repo_name: str,
         comment: str = "",
         default_distribution: str = "",
         default_component: str = "",
@@ -515,7 +563,7 @@ class Client:
         Edit local repo.
 
         Arguments:
-            name -- local repo name
+            repo_name -- local repo name
             comment -- comment for local repo
             default_distribution -- default distribution. When creating publish
                 from local repo, this attribute is looked up to determine target
@@ -531,20 +579,20 @@ class Client:
             body["DefaultDistribution"] = default_distribution
         if default_component:
             body["DefaultComponent"] = default_component
-        url = urljoin(self.url, self.repos_url_path, name)
+        url = urljoin(self.url, self.repos_url_path, repo_name)
         repo_data = self._request("PUT", url, body)
         repo_data = cast(Dict[str, str], repo_data)
         return Repo.from_api_response(repo_data)
 
-    def repo_delete(self, name: str, force: bool = False) -> None:
+    def repo_delete(self, repo_name: str, force: bool = False) -> None:
         """
         Delete local repo named
 
         Arguments:
-            name -- local repo name
+            repo_name -- local repo name
             force -- delete local repo even if it's pointed by a snapshot
         """
-        url = urljoin(self.url, self.repos_url_path, name)
+        url = urljoin(self.url, self.repos_url_path, repo_name)
         params = {}  # type: Dict[str, str]
         if force:
             params["force"] = "1"
@@ -552,13 +600,16 @@ class Client:
 
     def repo_add_packages(
         self,
-        name: str,
+        repo_name: str,
         directory: str,
         file: str = "",
         no_remove: bool = False,
         force_replace: bool = False,
     ) -> FilesReport:
-        url = urljoin(self.url, self.repos_url_path, name, "file", directory)
+        """
+        Add packages from upload dir on aptly server to a local repo
+        """
+        url = urljoin(self.url, self.repos_url_path, repo_name, "file", directory)
         if file:
             url = urljoin(url, file)
         params = {}  # type: Dict[str, str]
@@ -579,15 +630,15 @@ class Client:
     def _search(
         self,
         container: str,
-        name: str,
+        store_name: str,
         query: str = "",
         with_deps: bool = False,
         details: bool = False,
     ) -> List[Package]:
         if container == "local_repo":
-            url = urljoin(self.url, self.repos_url_path, name, "packages")
+            url = urljoin(self.url, self.repos_url_path, store_name, "packages")
         elif container == "snapshot":
-            url = urljoin(self.url, self.snapshots_url_path, name, "packages")
+            url = urljoin(self.url, self.snapshots_url_path, store_name, "packages")
         else:
             raise ValueError(
                 "container argument must be either 'local_repo' or 'snapshot'"
@@ -607,24 +658,37 @@ class Client:
         return [Package.from_key(key) for key in resp]
 
     def repo_search(
-        self, name: str, query: str = "", with_deps: bool = False, details: bool = False
+        self,
+        repo_name: str,
+        query: str = "",
+        with_deps: bool = False,
+        details: bool = False,
     ) -> List[Package]:
-        return self._search("local_repo", name, query, with_deps, details)
+        """
+        Search packages in a local repo
+        """
+        return self._search("local_repo", repo_name, query, with_deps, details)
 
     def _repo_add_delete_by_key(
-        self, method: str, name: str, keys: Sequence[str]
+        self, method: str, repo_name: str, keys: Sequence[str]
     ) -> Repo:
-        url = urljoin(self.url, self.repos_url_path, name, "packages")
+        url = urljoin(self.url, self.repos_url_path, repo_name, "packages")
         body = {"PackageRefs": keys}
         repo_data = self._request(method, url, data=body)
         repo_data = cast(Dict[str, str], repo_data)
         return Repo.from_api_response(repo_data)
 
-    def repo_add_packages_by_key(self, name: str, keys: Sequence[str]) -> Repo:
-        return self._repo_add_delete_by_key("POST", name, keys)
+    def repo_add_packages_by_key(self, repo_name: str, keys: Sequence[str]) -> Repo:
+        """
+        Add packages to a local repo by package keys
+        """
+        return self._repo_add_delete_by_key("POST", repo_name, keys)
 
-    def repo_delete_packages_by_key(self, name: str, keys: Sequence[str]) -> Repo:
-        return self._repo_add_delete_by_key("DELETE", name, keys)
+    def repo_delete_packages_by_key(self, repo_name: str, keys: Sequence[str]) -> Repo:
+        """
+        Delete packages from a local repo by package keys
+        """
+        return self._repo_add_delete_by_key("DELETE", repo_name, keys)
 
     def snapshot_create_from_repo(
         self, repo_name: str, snapshot_name: str, description: str = None
@@ -647,7 +711,7 @@ class Client:
 
     def snapshot_create_from_package_keys(
         self,
-        name: str,
+        snap_name: str,
         keys: Sequence[str],
         source_snapshots: Sequence[str] = (),
         description: str = None,
@@ -656,13 +720,13 @@ class Client:
         Create snapshot from a list of packages keys
 
         Arguments:
-            name -- new snapshot name
+            snap_name -- new snapshot name
             keys -- list of package keys to be included in new snapshot
             source_snapshots -- list of source snapshot names (only for tracking purposes)
             description -- optional human-readable description string
         """
         url = urljoin(self.url, self.snapshots_url_path)
-        data = {"Name": name, "PackageRefs": keys}
+        data = {"Name": snap_name, "PackageRefs": keys}
         if description:
             data["Description"] = description
         if source_snapshots:
@@ -671,14 +735,14 @@ class Client:
         snapshot_data = cast(Dict[str, str], snapshot_data)
         return Snapshot.from_api_response(snapshot_data)
 
-    def snapshot_show(self, name: str) -> Snapshot:
+    def snapshot_show(self, snap_name: str) -> Snapshot:
         """
         Returns Snapshot representing snapshot 'name'
 
         Arguments:
-            name -- snapshot name
+            snap_name -- snapshot name
         """
-        url = urljoin(self.url, self.snapshots_url_path, name)
+        url = urljoin(self.url, self.snapshots_url_path, snap_name)
         snap_data = self._request("GET", url)
         snap_data = cast(Dict[str, str], snap_data)
         return Snapshot.from_api_response(snap_data)
@@ -690,13 +754,13 @@ class Client:
         return [Snapshot.from_api_response(snap) for snap in snap_list]
 
     def snapshot_edit(
-        self, name: str, new_name: str = "", new_description: str = ""
+        self, snap_name: str, new_name: str = "", new_description: str = ""
     ) -> Snapshot:
         """
-        Modifies snapshot named 'name'
+        Modifies snapshot named 'snap_name'
 
         Arguments:
-            name -- snapshot name
+            snap_name -- snapshot name
             new_name -- rename snapshot to this name
             new_description -- set description to this
         """
@@ -705,25 +769,32 @@ class Client:
             body["Name"] = new_name
         if new_description:
             body["Description"] = new_description
-        url = urljoin(self.url, self.snapshots_url_path, name)
+        url = urljoin(self.url, self.snapshots_url_path, snap_name)
         snap_data = self._request("PUT", url, body)
         snap_data = cast(Dict[str, str], snap_data)
         return Snapshot.from_api_response(snap_data)
 
     def snapshot_search(
-        self, name: str, query: str = "", with_deps: bool = False, details: bool = False
+        self,
+        snap_name: str,
+        query: str = "",
+        with_deps: bool = False,
+        details: bool = False,
     ) -> List[Package]:
-        return self._search("snapshot", name, query, with_deps, details)
+        """
+        Search packages in a snapshot
+        """
+        return self._search("snapshot", snap_name, query, with_deps, details)
 
-    def snapshot_delete(self, name: str, force: bool = False) -> None:
+    def snapshot_delete(self, snap_name: str, force: bool = False) -> None:
         """
         Delete snapshot named 'name'
 
         Arguments:
-            name -- snapshot name
+            snap_name -- snapshot name
             force -- delete snapshot even if it's pointed by another snapshots
         """
-        url = urljoin(self.url, self.snapshots_url_path, name)
+        url = urljoin(self.url, self.snapshots_url_path, snap_name)
         params = {}  # type: Dict[str, str]
         if force:
             params["force"] = "1"
@@ -748,7 +819,7 @@ class Client:
             out.append((left, right))
         return out
 
-    def publish_create(
+    def publish_create(  # pylint: disable=too-many-arguments
         self,
         source_kind: str,
         sources: Iterable[Source],
@@ -764,6 +835,26 @@ class Client:
         force_overwrite: bool = False,
         skip_cleanup: bool = False,
     ) -> Publish:
+        """
+        Create publish either from local repos or from snapshots
+
+        Arguments:
+            source_kind -- "local" to create from local repos
+                            and "snapshot" to create from snapshots
+            sources -- Interable of Sources instances from which publish is created
+            storage -- optional storage type for publish. Default is local filesystem,
+                        "s3" for S3 "swift" for Swift
+            prefix -- optional url part that goes right after aply publish root
+            distribution -- debian distribution of created publish. Guessed from sources by default
+            architectures -- list of architectures in created publish
+            label, origin -- values of corresponing fields in published repository stanza
+            not_automatic -- indicates to the package manager to not install or upgrade packages
+                             from the repository without user consent
+            but_automatic_upgrades -- excludes upgrades from the not_automic setting
+            acquire_by_hash -- provide index files by hash
+            force_overwrite -- when publishing, overwrite files in pool/ directory without notice
+            skip_cleanup -- don’t remove unreferenced files in prefix/component
+        """
         publish = Publish(
             source_kind=source_kind,
             sources=tuple(sources),
@@ -796,6 +887,9 @@ class Client:
         return Publish.from_api_response(pub_data)
 
     def publish_list(self) -> List[Publish]:
+        """
+        Get a list of publishes
+        """
         url = urljoin(self.url, self.publish_url_path)
         pub_list = self._request("GET", url)
         pub_list = cast(List[Dict[str, Any]], pub_list)
@@ -809,6 +903,9 @@ class Client:
         distribution: str = "",
         force: bool = False,
     ) -> None:
+        """
+        Delete publish
+        """
         if publish:
             pub = publish
         else:
@@ -836,6 +933,10 @@ class Client:
         snapshots: Iterable[Source] = (),
         acquire_by_hash: bool = False,
     ) -> Publish:
+        """
+        Update publish pulling new packages from local repos
+        or switching to new snapshots
+        """
         if not publish:
             if snapshots:
                 publish = Publish(
@@ -877,17 +978,23 @@ class Client:
         return Publish.from_api_response(pub_data)
 
     def package_show(self, key: str) -> Package:
+        """
+        Get full package info
+        """
         pkg_data = self._request("GET", urljoin(self.url, self.packages_url_path, key))
         pkg_data = cast(Dict[str, str], pkg_data)
         return Package.from_api_response(pkg_data)
 
     def version(self) -> str:
+        """
+        Get aptly server version
+        """
         version_data = self._request("GET", urljoin(self.url, "api/version"))
         version_data = cast(Dict[str, str], version_data)
         return version_data["Version"]
 
 
-def search(
+def search(  # pylint: disable=too-many-locals
     aptly: Client,
     queries: Iterable[str] = ("",),
     with_deps: bool = False,

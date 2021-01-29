@@ -182,6 +182,7 @@ def package_show(parser: argparse.ArgumentParser) -> None:
 
 def package_search(parser: argparse.ArgumentParser) -> None:
     """configure 'package search' subcommand"""
+    # pylint: disable=too-many-statements
 
     parser.add_argument(
         "queries",
@@ -245,8 +246,6 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         """build a row in a table to be printed"""
         # pylint: disable=too-many-branches
         row: List[Union[str, Version]] = []
-        if not package.fields:
-            raise RuntimeError("package fileds are empty")
         for col in cols:
             if col == "store_type":
                 row.append("Snapshot" if isinstance(store, Snapshot) else "Repo")
@@ -267,10 +266,13 @@ def package_search(parser: argparse.ArgumentParser) -> None:
             elif col == "package_dir_ref":
                 row.append(package.dir_ref)
             elif col == "Installed-Size":
+                assert package.fields
                 row.append(size_pretty(int(package.fields[col]) * 1024))
             elif col == "Size":
+                assert package.fields
                 row.append(size_pretty(int(package.fields[col])))
             elif col[0] in string.ascii_uppercase:
+                assert package.fields
                 try:
                     row.append(package.fields[col])
                 except KeyError:
@@ -515,7 +517,6 @@ def repo_drop(parser: argparse.ArgumentParser) -> None:
     )
 
     def action(*, aptly: Client, repo_name: str, force: bool, **_unused: Any) -> None:
-        # TODO add ability to delete multiple repos
         try:
             aptly.repo_delete(repo_name, force)
         except AptlyApiError as exc:
@@ -806,7 +807,6 @@ def snapshot_drop(parser: argparse.ArgumentParser) -> None:
     def action(
         *, aptly: Client, snapshot_name: str, force: bool, **_unused: Any
     ) -> None:
-        # TODO add ability to delete multiple snapshots
         try:
             aptly.snapshot_delete(snapshot_name, force)
         except AptlyApiError as exc:
