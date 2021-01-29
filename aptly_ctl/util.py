@@ -78,7 +78,7 @@ def size_pretty(size: int) -> str:
 def format_table(
     orig_table: List[List[Any]],
     max_col_width: int,
-    sep=" ",
+    sep: str = " ",
     min_subtable_col_num: int = 1,
 ) -> List[List[str]]:
     """
@@ -180,7 +180,7 @@ def print_table(
         table.insert(0, header)
     normalize_table(table)
     if header:
-        header_sep = [header_sep * size for size in map(len, table[0])]
-        table.insert(1, header_sep)
+        header_sep_row = [header_sep * size for size in map(len, table[0])]
+        table.insert(1, header_sep_row)
     for row in table:
         print(*row, sep=sep)

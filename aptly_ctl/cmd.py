@@ -120,6 +120,8 @@ def package_show(parser: argparse.ArgumentParser) -> None:
 
     def print_packages(packages: Iterable[Package]) -> None:
         for package in packages:
+            if not package.fields:
+                raise RuntimeError("package fileds are empty")
             print('"', package.key, '"', sep="")
             for field in first_fileds:
                 print("   ", field, ":", package.fields[field])
@@ -243,6 +245,8 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         """build a row in a table to be printed"""
         # pylint: disable=too-many-branches
         row: List[Union[str, Version]] = []
+        if not package.fields:
+            raise RuntimeError("package fileds are empty")
         for col in cols:
             if col == "store_type":
                 row.append("Snapshot" if isinstance(store, Snapshot) else "Repo")

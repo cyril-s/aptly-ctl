@@ -766,11 +766,11 @@ class Client:
     ) -> Publish:
         publish = Publish(
             source_kind=source_kind,
-            sources=sources,
+            sources=tuple(sources),
             storage=storage,
             prefix=prefix,
             distribution=distribution,
-            architectures=architectures,
+            architectures=tuple(architectures),
             label=label,
             origin=origin,
             not_automatic=not_automatic,
@@ -814,7 +814,7 @@ class Client:
         else:
             pub = Publish(
                 source_kind="local",
-                sources=[],
+                sources=tuple(),
                 storage=storage,
                 prefix=prefix,
                 distribution=distribution,
@@ -840,7 +840,7 @@ class Client:
             if snapshots:
                 publish = Publish(
                     source_kind="snapshot",
-                    sources=snapshots,
+                    sources=tuple(snapshots),
                     storage=storage,
                     prefix=prefix,
                     distribution=distribution,
@@ -849,7 +849,7 @@ class Client:
             else:
                 publish = Publish(
                     source_kind="local",
-                    sources=[],
+                    sources=tuple(),
                     storage=storage,
                     prefix=prefix,
                     distribution=distribution,
@@ -912,29 +912,27 @@ def search(
     """
     repos = aptly.repo_list()
     snapshots = aptly.snapshot_list() if search_snapshots else []
-    stores = repos + snapshots
     if store_filter:
-        stores = filter(lambda s: store_filter.search(s.name), stores)
-    tasks = [(store, query) for store in stores for query in queries]
+        repos = [repo for repo in repos if store_filter.search(repo.name)]
+        snapshots = [snap for snap in snapshots if store_filter.search(snap.name)]
 
     def worker(
-        store: Union[Repo, Snapshot], query: str
+        store: Union[Repo, Snapshot], is_local_repo: bool, query: str
     ) -> Tuple[Union[Repo, Snapshot], List[Package]]:
+        pkg = None
         try:
             pkg = Package.from_key(query)
             query = pkg.dir_ref
         except InvalidPackageKey:
-            pkg = None
+            pass
 
-        if isinstance(store, Repo):
+        if is_local_repo:
             pkgs = aptly.repo_search(store.name, query, with_deps, details)
-        elif isinstance(store, Snapshot):
-            pkgs = aptly.snapshot_search(store.name, query, with_deps, details)
         else:
-            raise TypeError("Invalid store type of {}: {}".format(store, type(store)))
+            pkgs = aptly.snapshot_search(store.name, query, with_deps, details)
 
         if pkg:
-            pkgs = list(p for p in pkgs if p.files_hash == pkg.files_hash)
+            pkgs = [p for p in pkgs if p.files_hash == pkg.files_hash]
 
         return store, pkgs
 
@@ -943,8 +941,11 @@ def search(
     errors = []
     with ThreadPoolExecutor(max_workers=max_workers) as exe:
         try:
-            for task in tasks:
-                futures.append(exe.submit(worker, *task))
+            for query in queries:
+                for repo in repos:
+                    futures.append(exe.submit(worker, repo, True, query))
+                for snap in snapshots:
+                    futures.append(exe.submit(worker, snap, False, query))
             for future in as_completed(futures, 300):
                 try:
                     store, packages = future.result()
