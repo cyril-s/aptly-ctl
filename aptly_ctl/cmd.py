@@ -241,6 +241,7 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         cols: Iterable[str], store: Union[Snapshot, Repo], package: Package
     ) -> List[Any]:
         """build a row in a table to be printed"""
+        # pylint: disable=too-many-branches
         row: List[Union[str, Version]] = []
         for col in cols:
             if col == "store_type":
@@ -269,7 +270,7 @@ def package_search(parser: argparse.ArgumentParser) -> None:
                 try:
                     row.append(package.fields[col])
                 except KeyError:
-                    raise AptlyCtlError("Unknown output column name: " + col)
+                    raise AptlyCtlError("Unknown output column name: " + col) from None
             else:
                 raise AptlyCtlError("Unknown output column name: " + col)
         return row

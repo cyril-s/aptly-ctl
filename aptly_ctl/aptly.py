@@ -2,12 +2,9 @@
 import logging
 import re
 import os
-import urllib3
 import json
 import hashlib
-import fnvhash
 from datetime import datetime
-import dateutil.parser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import (
     Any,
@@ -23,6 +20,9 @@ from typing import (
     cast,
     Pattern,
 )
+import urllib3
+import fnvhash
+import dateutil.parser
 from aptly_ctl.exceptions import AptlyApiError
 from aptly_ctl.debian import Version, get_control_file_fields
 from aptly_ctl.util import urljoin, timedelta_pretty
@@ -95,12 +95,12 @@ class Package(NamedTuple):
     @property
     def key(self) -> str:
         """Returns aptly key"""
-        return "{o.prefix}P{o.arch} {o.name} {o.version} {o.files_hash}".format(o=self)
+        return f"{self.prefix}P{self.arch} {self.name} {self.version} {self.files_hash}"
 
     @property
     def dir_ref(self) -> str:
         """Returns aptly dir ref"""
-        return "{o.name}_{o.version}_{o.arch}".format(o=self)
+        return f"{self.name}_{self.version}_{self.arch}"
 
     @classmethod
     def from_key(cls, key: str) -> "Package":
@@ -131,9 +131,7 @@ class Package(NamedTuple):
                 for _hash in hashes:
                     _hash.update(chunk)
         fields = get_control_file_fields(filepath)
-        name = fields["Package"]
         version = Version(fields["Version"])
-        arch = fields["Architecture"]
         fileinfo = PackageFileInfo(
             md5=hashes[0].hexdigest(),
             sha1=hashes[1].hexdigest(),
@@ -153,7 +151,12 @@ class Package(NamedTuple):
             ]
         )
         files_hash = "{:x}".format(fnvhash.fnv1a_64(data))
-        key_fields = ["P" + arch, name, str(version), files_hash]
+        key_fields = [
+            "P" + fields["Architecture"],
+            fields["Package"],
+            str(version),
+            files_hash,
+        ]
         fields["Filename"] = fileinfo.filename
         fields["FilesHash"] = files_hash
         fields["Key"] = " ".join(key_fields)
@@ -165,9 +168,9 @@ class Package(NamedTuple):
         fields["Size"] = str(size)
         return (
             cls(
-                name=name,
+                name=fields["Package"],
                 version=version,
-                arch=arch,
+                arch=fields["Architecture"],
                 prefix="",
                 files_hash=files_hash,
                 fields=fields,
@@ -282,10 +285,10 @@ class Publish(NamedTuple):
     def sources_dict(self) -> List[Dict[str, str]]:
         sources = []
         for source in self.sources:
-            s = {"Name": source.name}  # type: Dict[str, str]
             if source.component:
-                s["Component"] = source.component
-            sources.append(s)
+                sources.append({"Name": source.name, "Component": source.component})
+            else:
+                sources.append({"Name": source.name})
         return sources
 
     @property
@@ -335,7 +338,7 @@ class Publish(NamedTuple):
         return f"{self.full_prefix}/{self.distribution}"
 
     def __hash__(self) -> int:
-        return hash((field for field in self))
+        return hash((field for field in self))  # pylint: disable=not-an-iterable
 
 
 class FilesReport(NamedTuple):
@@ -819,7 +822,8 @@ class Client:
         url = urljoin(
             self.url, self.publish_url_path, pub.full_prefix_escaped, pub.distribution
         )
-        self._request("DELETE", url)
+        params = {"force": "1"} if force else {}
+        self._request("DELETE", url, params=params)
 
     def publish_update(
         self,
