@@ -678,6 +678,126 @@ def repo_remove(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def repo_copy_or_move(parser: argparse.ArgumentParser, move: bool) -> None:
+    """configure 'repo copy' and 'repo move' subcommands"""
+    parser.add_argument(
+        "src_repo_name", metavar="<src_repo_name>", help="source local repo name"
+    )
+    parser.add_argument(
+        "dst_repo_name", metavar="<dst_repo_name>", help="destination local repo name"
+    )
+    parser.add_argument(
+        "queries",
+        nargs="*",
+        default=("",),
+        metavar="<package_query>",
+        help="package query",
+    )
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="don't do anything, just show packages to be transfered",
+    )
+    parser.add_argument(
+        "--with-deps",
+        action="store_true",
+        help="follow dependencies when processing package query",
+    )
+    parser.add_argument(
+        "-U",
+        "--update-publishes",
+        action="store_true",
+        help="update dependent publishes",
+    )
+
+    operation = "move" if move else "copy"
+
+    def action(
+        *,
+        aptly: Client,
+        src_repo_name: str,
+        dst_repo_name: str,
+        queries: List[str],
+        dry_run: bool,
+        with_deps: bool,
+        update_publishes: bool,
+        max_workers: int,
+        **_unused: Any,
+    ) -> None:
+        try:
+            aptly.repo_show(src_repo_name)
+        except AptlyApiError as exc:
+            if exc.status == 404:
+                raise AptlyCtlError(f"{operation.capitalize()} failed") from exc
+            raise
+
+        result, errors = search(
+            aptly,
+            queries,
+            with_deps=with_deps,
+            max_workers=max_workers,
+            store_filter=re.compile(f"^{src_repo_name}$"),
+            search_snapshots=False,
+        )
+
+        for error in errors:
+            log.error(error)
+        if errors:
+            raise AptlyCtlError(
+                f"Package search in {src_repo_name} finished with errors"
+            )
+        if not result:
+            raise AptlyCtlError(f"No packages found to {operation}")
+
+        pkgs = set()
+        for repo, packages in result:
+            # seems no way we fail here, but just in case abort execution
+            assert repo.name == src_repo_name
+            pkgs.update(packages)
+
+        table = [
+            [
+                src_repo_name,
+                dst_repo_name,
+                pkg.name,
+                pkg.version,
+                pkg.dir_ref,
+                f'"{pkg.key}"',
+            ]
+            for pkg in pkgs
+        ]
+        table.sort()
+        print_table(
+            table, ["source", "destination", "name", "version", "dir_ref", "key"]
+        )
+
+        keys = [pkg.key for pkg in pkgs]
+        try:
+            log.info("Adding packages to '%s'", dst_repo_name)
+            if not dry_run:
+                aptly.repo_add_packages_by_key(dst_repo_name, keys)
+        except AptlyApiError as exc:
+            if exc.status in [400, 404]:
+                raise AptlyCtlError(
+                    "Failed to add packages to destination local repo"
+                ) from exc
+            raise
+
+        pubs_to_update = [dst_repo_name]
+
+        if move:
+            log.info("Removing packages from source repo '%s'", src_repo_name)
+            if not dry_run:
+                aptly.repo_delete_packages_by_key(src_repo_name, keys)
+            pubs_to_update.append(src_repo_name)
+
+        if update_publishes:
+            update_dependent_publishes(aptly, pubs_to_update, dry_run)
+
+    parser.set_defaults(func=action)
+
+
 def snapshot_create(parser: argparse.ArgumentParser) -> None:
     """configure 'snapshot create'"""
     parser.add_argument(
@@ -1335,6 +1455,24 @@ def parse_args() -> argparse.Namespace:
             description="remove packages from local repo",
             help="remove packages from local repo",
         )
+    )
+
+    repo_copy_or_move(
+        repo_actions.add_parser(
+            "copy",
+            description="copy packages between local repos",
+            help="copy packages between local repos",
+        ),
+        False,
+    )
+
+    repo_copy_or_move(
+        repo_actions.add_parser(
+            "move",
+            description="move packages between local repos",
+            help="move packages between local repos",
+        ),
+        True,
     )
 
     # snapshot subcommand
