@@ -8,13 +8,11 @@ from typing import (
     List,
     Union,
     Optional,
-    NamedTuple,
     Tuple,
     Dict,
     Pattern,
     Container,
 )
-import json
 import sys
 import os
 from datetime import datetime
@@ -49,6 +47,11 @@ def regex(pattern: str) -> re.Pattern:
         return re.compile(pattern)
     except re.error as exc:
         raise argparse.ArgumentTypeError("Invalid regex '{}': {}".format(pattern, exc))
+
+
+def str_list(str_list_raw: str) -> List[str]:
+    """Convert string elements separated by comas into a list discarding empty strings"""
+    return [elem for elem in str_list_raw.split(",") if elem]
 
 
 def update_dependent_publishes(
@@ -115,16 +118,17 @@ def package_show(parser: argparse.ArgumentParser) -> None:
     last_fields = ["Description"]
     skip_fields = set(first_fileds) | set(last_fields) | {"Key", "ShortKey"}
 
-    def print_package(package: Package) -> None:
-        print('"', package.key, '"', sep="")
-        for field in first_fileds:
-            print("   ", field, ":", package.fields[field])
-        for field in sorted(package.fields.keys()):
-            if field in skip_fields:
-                continue
-            print("   ", field, ":", package.fields[field])
-        for field in last_fields:
-            print("   ", field, ":", package.fields[field])
+    def print_packages(packages: Iterable[Package]) -> None:
+        for package in packages:
+            print('"', package.key, '"', sep="")
+            for field in first_fileds:
+                print("   ", field, ":", package.fields[field])
+            for field in sorted(package.fields.keys()):
+                if field in skip_fields:
+                    continue
+                print("   ", field, ":", package.fields[field])
+            for field in last_fields:
+                print("   ", field, ":", package.fields[field])
 
     def action(
         *,
@@ -161,15 +165,12 @@ def package_show(parser: argparse.ArgumentParser) -> None:
                 details=True,
                 max_workers=max_workers,
             )
-            for _, packages in result:
-                for package in packages:
-                    pkgs.add(package)
+            pkgs.update(package for _, packages in result for package in packages)
             for error in errors:
                 log.error(error)
                 err_exit = True
 
-        for pkg in pkgs:
-            print_package(pkg)
+        print_packages(pkgs)
 
         if err_exit:
             raise AptlyCtlError("Some packages were not found")
@@ -196,7 +197,8 @@ def package_search(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-o",
         "--out-columns",
-        dest="base_out_columns_str",
+        dest="base_out_columns",
+        type=str_list,
         metavar="OUT_COLUMNS",
         default="store_type,store_name,package_name,package_version,package_dir_ref,package_key_quoted",
         help="""output columns. Available columns: store_type, store_name,
@@ -209,7 +211,8 @@ def package_search(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-O",
         "--extra-out-columns",
-        dest="extra_out_columns_str",
+        dest="extra_out_columns",
+        type=str_list,
         metavar="EXTRA_OUT_COLUMNS",
         default="",
         help="output columns to append to a default set",
@@ -276,16 +279,14 @@ def package_search(parser: argparse.ArgumentParser) -> None:
         aptly: Client,
         queries: Iterable[str],
         with_deps: bool,
-        base_out_columns_str: str,
-        extra_out_columns_str: str,
+        base_out_columns: List[str],
+        extra_out_columns: List[str],
         max_workers: int,
         store_filter: Optional[Pattern],
         sort_reverse: bool,
         no_header: bool,
         **_unused: Any,
     ) -> None:
-        base_out_columns = list(filter(None, base_out_columns_str.split(",")))
-        extra_out_columns = list(filter(None, extra_out_columns_str.split(",")))
         out_columns = base_out_columns + extra_out_columns
         details = any(col[0] in string.ascii_uppercase for col in out_columns)
 
@@ -892,7 +893,9 @@ def publish_create(
 
     parser.add_argument(
         "-c",
-        "--component",
+        "--components",
+        type=str_list,
+        default="",
         metavar="<component>[,<component>,...]",
         help="component name to publish. Guessed from original repository (if any), or defaults to main."
         " For multi-component publishing, separate components with commas",
@@ -901,6 +904,8 @@ def publish_create(
     parser.add_argument(
         "-a",
         "--architectures",
+        type=str_list,
+        default="",
         metavar="<architecture>[,<architecture>,...]",
         help="override default list of architectures to be published",
     )
@@ -956,8 +961,8 @@ def publish_create(
         storage: str,
         prefix: str,
         distribution: str,
-        component: Optional[str],
-        architectures: Optional[str],
+        components: List[str],
+        architectures: List[str],
         label: str,
         origin: str,
         acquire_by_hash: bool,
@@ -975,16 +980,16 @@ def publish_create(
             )
 
         source_kind = "snapshot" if snapshot_action else "local"
-        arch = architectures.split(",") if architectures else []
-        comps = component.split(",") if component else []
 
-        if comps and len(comps) != len(source_names):
+        if components and len(components) != len(source_names):
             raise AptlyCtlError(
                 "If you provide components, provide them for every source"
             )
 
-        if comps:
-            sources = [Source(name, comp) for name, comp in zip(source_names, comps)]
+        if components:
+            sources = [
+                Source(name, comp) for name, comp in zip(source_names, components)
+            ]
         else:
             sources = [Source(name) for name in source_names]
 
@@ -994,7 +999,7 @@ def publish_create(
             storage=storage,
             prefix=prefix,
             distribution=distribution,
-            architectures=arch,
+            architectures=architectures,
             label=label,
             origin=origin,
             not_automatic=not_automatic,
@@ -1085,7 +1090,9 @@ def publish_switch(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "-c",
-        "--component",
+        "--components",
+        type=str_list,
+        default="main",
         metavar="<component>[,<component>,...]",
         help="""when switching published snapshots for multiple component repositories
         any subset of snapshots could be updated,
@@ -1107,19 +1114,20 @@ def publish_switch(parser: argparse.ArgumentParser) -> None:
         distribution: str,
         endpoint_and_prefix: str,
         new_snapshot_names: List[str],
-        component: str,
+        components: List[str],
         force_overwrite: bool,
         **_unused: Any,
     ) -> None:
         storage, _, prefix = endpoint_and_prefix.rpartition(":")
-        comps = component.split(",") if component else ["main"]
 
-        if len(comps) != len(new_snapshot_names):
+        if len(components) != len(new_snapshot_names):
             raise AptlyCtlError(
                 "For multiple component publishes specify component for each updated snapshot"
             )
 
-        sources = [Source(name, comp) for name, comp in zip(new_snapshot_names, comps)]
+        sources = [
+            Source(name, comp) for name, comp in zip(new_snapshot_names, components)
+        ]
 
         publish = aptly.publish_update(
             force_overwrite=force_overwrite,
