@@ -18,6 +18,7 @@ import os
 from datetime import datetime
 import string
 import urllib3.exceptions  # type: ignore # https://github.com/urllib3/urllib3/issues/1897
+from urllib3 import Timeout
 from aptly_ctl import VERSION
 from aptly_ctl.aptly import (
     Client,
@@ -1612,6 +1613,7 @@ def main() -> None:
         url=config.url,
         default_signing_config=config.default_signing_config,
         signing_config_map=config.signing_config_map,
+        timeout=Timeout(connect=config.connect_timeout, read=config.read_timeout),
     )
 
     try:

@@ -394,9 +394,10 @@ class Client:  # pylint: disable=too-many-public-methods
         max_workers: int = 10,
         default_signing_config: SigningConfig = DefaultSigningConfig,
         signing_config_map: Dict[str, SigningConfig] = None,
+        timeout: urllib3.Timeout = urllib3.Timeout(connect=15.0, read=None),
     ) -> None:
         self.base_headers = {"User-Agent": f"aptly-ctl/{VERSION}"}
-        self.http = urllib3.PoolManager(headers=self.base_headers)
+        self.http = urllib3.PoolManager(headers=self.base_headers, timeout=timeout)
         self.url = url
         self.max_workers = max_workers
         self.default_signing_config = default_signing_config

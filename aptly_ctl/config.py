@@ -29,6 +29,8 @@ class Config:
     url: str = "http://localhost:8090/"
     default_signing_config: SigningConfig = DefaultSigningConfig
     signing_config_map: Optional[Dict[str, SigningConfig]] = None
+    connect_timeout: Optional[float] = 15.0
+    read_timeout: Optional[float] = None
 
     def __init__(
         self, path: str = None, section: str = "", override: Dict[str, Any] = None
@@ -102,6 +104,16 @@ class Config:
                     **config_section["signing map"][key]
                 )
             self.signing_config_map = signing_config_map if signing_config_map else None
+
+        if "connect_timeout" in override:
+            self.connect_timeout = float(override["connect_timeout"])
+        elif "connect_timeout" in config_section:
+            self.connect_timeout = float(config_section["connect_timeout"])
+
+        if "read_timeout" in override:
+            self.read_timeout = float(override["read_timeout"])
+        elif "read_timeout" in config_section:
+            self.read_timeout = float(config_section["read_timeout"])
 
 
 def parse_override_dict(keys: Sequence[str]) -> Dict[str, Any]:
