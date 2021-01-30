@@ -17,7 +17,7 @@ import sys
 import os
 from datetime import datetime
 import string
-import urllib3.exceptions
+import urllib3.exceptions  # type: ignore # https://github.com/urllib3/urllib3/issues/1897
 from aptly_ctl import VERSION
 from aptly_ctl.aptly import (
     Client,

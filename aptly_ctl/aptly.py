@@ -20,8 +20,8 @@ from typing import (
     cast,
     Pattern,
 )
-import urllib3
-import fnvhash
+import urllib3  # type: ignore # https://github.com/urllib3/urllib3/issues/1897
+import fnvhash  # type: ignore
 import dateutil.parser
 from aptly_ctl.exceptions import AptlyApiError
 from aptly_ctl.debian import Version, get_control_file_fields
