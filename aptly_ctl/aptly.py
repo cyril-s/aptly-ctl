@@ -26,6 +26,7 @@ import dateutil.parser
 from aptly_ctl.exceptions import AptlyApiError
 from aptly_ctl.debian import Version, get_control_file_fields
 from aptly_ctl.util import urljoin, timedelta_pretty
+from aptly_ctl import VERSION
 
 log = logging.getLogger(__name__)
 
@@ -394,7 +395,8 @@ class Client:  # pylint: disable=too-many-public-methods
         default_signing_config: SigningConfig = DefaultSigningConfig,
         signing_config_map: Dict[str, SigningConfig] = None,
     ) -> None:
-        self.http = urllib3.PoolManager()
+        self.base_headers = {"User-Agent": f"aptly-ctl/{VERSION}"}
+        self.http = urllib3.PoolManager(headers=self.base_headers)
         self.url = url
         self.max_workers = max_workers
         self.default_signing_config = default_signing_config
@@ -445,7 +447,7 @@ class Client:  # pylint: disable=too-many-public-methods
                 method,
                 url,
                 body=encoded_data,
-                headers={"Content-Type": "application/json"},
+                headers=self.base_headers.update({"Content-Type": "application/json"}),
             )
         log.debug(
             "response on %s %s took %s returned %s: %s",
