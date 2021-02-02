@@ -941,6 +941,81 @@ def snapshot_drop(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def snapshot_filter(parser: argparse.ArgumentParser) -> None:
+    """configure 'snapshot filter'"""
+    parser.add_argument("source", metavar="<source>", help="source snapshot name")
+    parser.add_argument(
+        "destination", metavar="<destination>", help="destination snapshot name"
+    )
+    parser.add_argument(
+        "queries", nargs="+", metavar="<package_query>", help="package query"
+    )
+    parser.add_argument(
+        "--with-deps",
+        action="store_true",
+        help="include dependencies of matching packages",
+    )
+
+    def action(
+        *,
+        aptly: Client,
+        source: str,
+        destination: str,
+        queries: List[str],
+        with_deps: bool,
+        max_workers: int,
+        **_unused: Any,
+    ) -> None:
+        result, errors = search(
+            aptly,
+            queries,
+            with_deps,
+            max_workers=max_workers,
+            store_filter=re.compile(f"^{source}$"),
+            search_repos=False,
+        )
+
+        for error in errors:
+            log.error(error)
+        if errors:
+            raise AptlyCtlError("Failed to filter packages")
+
+        pkgs = set()
+        for snap, packages in result:
+            assert snap.name == source
+            pkgs.update(packages)
+
+        try:
+            aptly.snapshot_create_from_package_keys(
+                destination,
+                [pkg.key for pkg in pkgs],
+                source_snapshots=[source],
+                description=f"Filtered '{source}', queries were: {queries}",
+            )
+        except AptlyApiError as exc:
+            if exc.status in [400, 404]:
+                raise AptlyCtlError("Failed to create destination snapshot") from exc
+            raise
+
+        table = [
+            [source, destination, pkg.name, pkg.version, pkg.dir_ref, pkg.key]
+            for pkg in pkgs
+        ]
+        print_table(
+            table,
+            header=[
+                "source",
+                "destination",
+                "name",
+                "version",
+                "dir_ref",
+                "package_key",
+            ],
+        )
+
+    parser.set_defaults(func=action)
+
+
 def print_publishes(pubs: Iterable[Publish]) -> None:
     """print a list of Publish instances to stdout"""
     leading_fields = ["source_kind", "distribution", "prefix", "storage"]
@@ -1514,6 +1589,14 @@ def parse_args() -> argparse.Namespace:
             aliases=["delete"],
             description="delete snapshots",
             help="delete snapshots",
+        )
+    )
+
+    snapshot_filter(
+        snapshot_actions.add_parser(
+            "filter",
+            description="appplies filter to contents of one snapshot producing another snapshot",
+            help="appplies filter to contents of one snapshot producing another snapshot",
         )
     )
 

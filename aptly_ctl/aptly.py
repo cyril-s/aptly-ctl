@@ -1004,6 +1004,7 @@ def search(  # pylint: disable=too-many-locals
     details: bool = False,
     max_workers: int = 5,
     store_filter: Pattern = None,
+    search_repos: bool = True,
     search_snapshots: bool = True,
 ) -> Tuple[List[Tuple[Union[Repo, Snapshot], List[Package]]], List[AptlyApiError]]:
     """
@@ -1018,9 +1019,10 @@ def search(  # pylint: disable=too-many-locals
         details -- fill in 'fields' attribute of returned Package instances
         max_workers -- max number of threads
         store_filter -- regex to filter Repo and Snapshot instances by name
-        search_snapshots -- search snapshots as well, True by default
+        search_repos -- search repos, True by default
+        search_snapshots -- search snapshots, True by default
     """
-    repos = aptly.repo_list()
+    repos = aptly.repo_list() if search_repos else []
     snapshots = aptly.snapshot_list() if search_snapshots else []
     if store_filter:
         repos = [repo for repo in repos if store_filter.search(repo.name)]
