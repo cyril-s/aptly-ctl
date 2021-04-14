@@ -74,7 +74,7 @@ def update_dependent_publishes(
     print()
 
     if dry_run:
-        print_table([[p] for p in publishes], ["Publishes to update"])
+        print_table([[str(p)] for p in publishes], ["Publishes to update"])
         return
 
     updated_publishes = []
@@ -83,9 +83,9 @@ def update_dependent_publishes(
         try:
             updated_publishes.append(aptly.publish_update(publish))
         except AptlyApiError as exc:
-            failed_to_updated_publishes.append([publish, int(exc.status), exc])
+            failed_to_updated_publishes.append([str(publish), int(exc.status), exc])
 
-    print_table([[p] for p in updated_publishes], ["Updated publishes"])
+    print_table([[str(p)] for p in updated_publishes], ["Updated publishes"])
 
     if failed_to_updated_publishes:
         print()

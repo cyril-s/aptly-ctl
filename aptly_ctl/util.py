@@ -82,10 +82,11 @@ def format_table(
     min_subtable_col_num: int = 1,
 ) -> List[List[str]]:
     """
-    Return formatted table. Non-list, empty and single sized lists are converted using str().
+    Return formatted table. Non-list, empty and single sized lists and tuples are converted using str().
     List elements are arranged into a subtable. For every row of this subtable except the first
     a blank row is added to contain table rows. If blank row were created before,
     the elements at corresponding index are set.
+    Cannot handle NamedTuple correctly.
 
     Arguments:
         max_col_width -- maximum column width. Taken into account
@@ -102,7 +103,7 @@ def format_table(
     for row in orig_table:
         split_row = [[]]
         for elem_index, elem in enumerate(row):
-            if not isinstance(elem, list):
+            if not isinstance(elem, list) and not isinstance(elem, tuple):
                 split_row[0].append(str(elem))
                 continue
             if len(elem) == 0:
