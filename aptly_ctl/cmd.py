@@ -989,7 +989,7 @@ def snapshot_filter(parser: argparse.ArgumentParser) -> None:
             pkgs.update(packages)
 
         try:
-            aptly.snapshot_create_from_package_keys(
+            filtered_snap = aptly.snapshot_create_from_package_keys(
                 destination,
                 [pkg.key for pkg in pkgs],
                 source_snapshots=[source],
@@ -1000,20 +1000,15 @@ def snapshot_filter(parser: argparse.ArgumentParser) -> None:
                 raise AptlyCtlError("Failed to create destination snapshot") from exc
             raise
 
-        table = [
-            [source, destination, pkg.name, pkg.version, pkg.dir_ref, pkg.key]
-            for pkg in pkgs
-        ]
         print_table(
-            table,
-            header=[
-                "source",
-                "destination",
-                "name",
-                "version",
-                "dir_ref",
-                "package_key",
+            [
+                [
+                    filtered_snap.name,
+                    filtered_snap.description,
+                    filtered_snap.created_at,
+                ]
             ],
+            header=["name", "description", "created_at"],
         )
 
     parser.set_defaults(func=action)
