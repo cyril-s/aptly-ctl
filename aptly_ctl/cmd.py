@@ -12,11 +12,14 @@ from typing import (
     Dict,
     Pattern,
     Container,
+    Generator,
+    cast,
 )
 import sys
 import os
 from datetime import datetime
 import string
+from enum import Enum
 import urllib3.exceptions  # type: ignore # https://github.com/urllib3/urllib3/issues/1897
 from urllib3 import Timeout
 from aptly_ctl import VERSION
@@ -1016,6 +1019,154 @@ def snapshot_filter(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def snapshot_merge(parser: argparse.ArgumentParser) -> None:
+    """configure 'snapshot merge'"""
+    # pylint: disable=too-many-statements
+
+    parser.add_argument(
+        "destination",
+        metavar="<destination>",
+        help="a snapshot name that will be created",
+    )
+    parser.add_argument(
+        "sources",
+        metavar="<source>",
+        nargs="+",
+        help=" snapshot name that will be merged",
+    )
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "-l",
+        "--latest",
+        action="store_true",
+        help="merge only the latest version of each package",
+    )
+    group.add_argument(
+        "-k",
+        "--keep",
+        "--no-remove",
+        dest="keep",
+        action="store_true",
+        help="preserve all versions of packages during merge",
+    )
+
+    class Mode(Enum):
+        """
+        latest_snap - from the packages with the same name and arch
+        a package from the latest snapshot is picked.
+        latest_ver - from the packages with the same name and arch
+        a package with the latest version is picked.
+        copy - merge all packages.
+        """
+
+        latest_snap = "latest snapshot"
+        latest_ver = "latest version"
+        copy = "copy"
+
+    def merge_latest_snap(
+        search_result: List[Tuple[Union[Repo, Snapshot], List[Package]]],
+        sources: List[str],
+    ) -> Generator[Package, None, None]:
+        pkgs: Dict[str, Tuple[Package, datetime]]
+        for snap, packages in search_result:
+            snap = cast(Snapshot, snap)
+            assert snap.name in sources
+            for pkg in packages:
+                key = pkg.name + pkg.arch
+                if key in pkgs:
+                    if snap.created_at > pkgs[key][1]:
+                        pkgs[key] = (pkg, snap.created_at)
+                    elif (
+                        snap.created_at == pkgs[key][1]
+                        and pkg.version > pkgs[key][0].version
+                    ):
+                        pkgs[key] = (pkg, snap.created_at)
+                else:
+                    pkgs[key] = (pkg, snap.created_at)
+        return (pkg for pkg, _ in pkgs.values())
+
+    def merge_latest_ver(
+        search_result: List[Tuple[Union[Repo, Snapshot], List[Package]]],
+        sources: List[str],
+    ) -> Generator[Package, None, None]:
+        pkgs: Dict[str, Package]
+        for snap, packages in search_result:
+            snap = cast(Snapshot, snap)
+            assert snap.name in sources
+            for pkg in packages:
+                key = pkg.name + pkg.arch
+                if key in pkgs:
+                    if pkg.version > pkgs[key].version:
+                        pkgs[key] = pkg
+                else:
+                    pkgs[key] = pkg
+        return (pkg for pkg in pkgs.values())
+
+    def action(
+        *,
+        aptly: Client,
+        destination: str,
+        sources: List[str],
+        latest: bool,
+        keep: bool,
+        max_workers: int,
+        **_unused: Any,
+    ) -> None:
+        if keep or len(sources) == 1:
+            mode = Mode.copy
+            if latest:
+                log.warning(
+                    "--latest flag is ignored since there is only one source snapshot"
+                )
+        elif latest:
+            mode = Mode.latest_ver
+        else:
+            mode = Mode.latest_snap
+
+        result, errors = search(
+            aptly,
+            max_workers=max_workers,
+            store_filter=re.compile(f"^({'|'.join(sources)})$"),
+            search_repos=False,
+        )
+
+        for error in errors:
+            log.error(error)
+        if errors:
+            raise AptlyCtlError("Failed to merge packages")
+
+        pkgs = set()
+
+        if mode is Mode.copy:
+            for snap, packages in result:
+                assert snap.name in sources
+                pkgs.update(packages)
+        elif mode is Mode.latest_snap:
+            pkgs.update(merge_latest_snap(result, sources))
+        elif mode is Mode.latest_ver:
+            pkgs.update(merge_latest_ver(result, sources))
+
+        try:
+            merged_snap = aptly.snapshot_create_from_package_keys(
+                destination,
+                [pkg.key for pkg in pkgs],
+                source_snapshots=sources,
+                description=f"""Merged ({mode.value}) from sources: '{"', '".join(sources)}'""",
+            )
+        except AptlyApiError as exc:
+            if exc.status in [400, 404]:
+                raise AptlyCtlError("Failed to create destination snapshot") from exc
+            raise
+
+        print_table(
+            [[merged_snap.name, merged_snap.description, merged_snap.created_at]],
+            header=["name", "description", "created_at"],
+        )
+
+    parser.set_defaults(func=action)
+
+
 def print_publishes(pubs: Iterable[Publish]) -> None:
     """print a list of Publish instances to stdout"""
     leading_fields = ["source_kind", "distribution", "prefix", "storage"]
@@ -1597,6 +1748,20 @@ def parse_args() -> argparse.Namespace:
             "filter",
             description="appplies filter to contents of one snapshot producing another snapshot",
             help="appplies filter to contents of one snapshot producing another snapshot",
+        )
+    )
+
+    snapshot_merge(
+        snapshot_actions.add_parser(
+            "merge",
+            help="merges several source snapshots into new destination snapshot",
+            description="""Merges several source snapshots into new destination snapshot.
+            By default, packages with the same name-architecture pair
+            are replaced during merge (package from latest snapshot on the list wins).
+            With --latest flag, package with latest version wins.
+            With --no-remove flag, all versions of packages are preserved during merge.
+            If only one snapshot is specified, merge copies source into destination.
+            """,
         )
     )
 
