@@ -649,7 +649,7 @@ class TestAptlyClient:
         )
 
         snap_new = aptly.snapshot_create_from_repo(repo.name, rand("snap2_"))
-        sources_new = [Source(snap_new.name, "main")]
+        sources_new = (Source(snap_new.name, "main"),)
         pub_new = pub._replace(sources=sources_new)
         updated_pub = aptly.publish_update(pub_new)
         assert updated_pub.prefix == "."
