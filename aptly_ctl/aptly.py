@@ -231,8 +231,8 @@ class Snapshot(NamedTuple):
     """Represents snapshot in aptly"""
 
     name: str
-    description: str = ""
-    created_at: Optional[datetime] = None
+    description: str
+    created_at: datetime
 
     @classmethod
     def from_api_response(cls, resp: Dict[str, str]) -> "Snapshot":
