@@ -515,9 +515,9 @@ class TestAptlyClient:
         snap2 = aptly.snapshot_create_from_repo(repo.name, rand("snap"))
 
         diff = aptly.snapshot_diff(snap1.name, snap2.name)
-        assert all([line[0] is None for line in diff])
-        expected_pkgs = [pkg._replace(fields=None) for pkg, _ in packages_simple]
-        assert sorted([line[1] for line in diff]) == sorted(expected_pkgs)
+        assert all(
+            (left is None and isinstance(right, Package) for left, right in diff)
+        )
 
     def test_publish_create_from_local_repo(self, aptly: Client) -> None:
         repo = aptly.repo_create(rand("test"))

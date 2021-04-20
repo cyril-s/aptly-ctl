@@ -1162,6 +1162,28 @@ def snapshot_merge(parser: argparse.ArgumentParser) -> None:
     parser.set_defaults(func=action)
 
 
+def snapshot_diff(parser: argparse.ArgumentParser) -> None:
+    """configure 'snapshot diff'"""
+    parser.add_argument("snap_left", help="snapshot name")
+    parser.add_argument("snap_right", help="snapshot name")
+
+    def action(
+        *,
+        aptly: Client,
+        snap_left: str,
+        snap_right: str,
+        **_unused: Any,
+    ) -> None:
+        table = []
+        for left, right in aptly.snapshot_diff(snap_left, snap_right):
+            left_str = "" if left is None else left.key
+            right_str = "" if right is None else right.key
+            table.append([left_str, right_str])
+        print_table(table, [snap_left, snap_right])
+
+    parser.set_defaults(func=action)
+
+
 def print_publishes(pubs: Iterable[Publish]) -> None:
     """print a list of Publish instances to stdout"""
     leading_fields = ["source_kind", "distribution", "prefix", "storage"]
@@ -1757,6 +1779,14 @@ def parse_args() -> argparse.Namespace:
             With --no-remove flag, all versions of packages are preserved during merge.
             If only one snapshot is specified, merge copies source into destination.
             """,
+        )
+    )
+
+    snapshot_diff(
+        snapshot_actions.add_parser(
+            "diff",
+            description="displays difference in packages between two snapshots",
+            help="displays difference in packages between two snapshots",
         )
     )
 
