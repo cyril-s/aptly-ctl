@@ -396,7 +396,15 @@ class Client:  # pylint: disable=too-many-public-methods
         signing_config_map: Dict[str, SigningConfig] = None,
         timeout: urllib3.Timeout = urllib3.Timeout(connect=15.0, read=None),
     ) -> None:
-        self.base_headers = {"User-Agent": f"aptly-ctl/{VERSION}"}
+        parsed_url = urllib3.util.parse_url(url)
+        if parsed_url.auth:
+            self.base_headers = urllib3.util.make_headers(
+                user_agent=f"aptly-ctl/{VERSION}", basic_auth=parsed_url.auth
+            )
+        else:
+            self.base_headers = urllib3.util.make_headers(
+                user_agent=f"aptly-ctl/{VERSION}"
+            )
         self.http = urllib3.PoolManager(headers=self.base_headers, timeout=timeout)
         self.url = url
         self.max_workers = max_workers
