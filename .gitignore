@@ -1,6 +1,6 @@
 *.py[cod]
 __pycache__/
-/env/
+/env*/
 
 build/
 dist/
@@ -11,3 +11,7 @@ sdist/
 .pytest_cache
 *.swp
 .tox/
+.mypy_cache
+
+test_packages/
+snippet*.py

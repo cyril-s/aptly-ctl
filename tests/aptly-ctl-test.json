@@ -1,0 +1,15 @@
+{
+    "test": {
+        "url": "http://localhost:8090",
+        "signing": {
+            "gpgkey": "DC3CFE1DD8562BB86BF3845A4E15F887476CCCE0",
+            "passphrase_file": "/home/aptly/gpg_pass"
+        }
+    },
+    "broken": {
+        "url": "http://localhost:8090/api",
+        "signing": {
+            "skip": true
+        }
+    }
+}
