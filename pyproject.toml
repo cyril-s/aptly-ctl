@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aptly-ctl"
+dynamic = ["version"]
+description = "Convenient command line Aptly API client"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.7"
+authors = [
+    { name = "Kyrylo Shestakov", email = "freyr.sh@gmail.com" },
+]
+
+keywords = ["aptly", "apt", "debian", "ubuntu"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Topic :: Utilities",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "fnvhash",
+    "python-dateutil",
+    "unix-ar",
+    "urllib3",
+]
+
+[project.scripts]
+aptly-ctl = "aptly_ctl.cmd:main"
+
+[project.urls]
+Homepage = "https://github.com/cyril-s/aptly-ctl"
+Repository = "https://github.com/cyril-s/aptly-ctl.git"
+Issues = "https://github.com/cyril-s/aptly-ctl/issues"
+
+[tool.hatch.version]
+path = "aptly_ctl/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/aptly_ctl",
+]
+
+[tool.hatch.envs.dev]
+dependencies = [
+    "pytest",
+    "mypy",
+    "twine",
+    "pynvim",
+    "black",
+    "flake8",
+    "pylint",
+]
