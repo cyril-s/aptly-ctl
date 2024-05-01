@@ -29,8 +29,8 @@ class Config:
     url: str = "http://localhost:8090/"
     default_signing_config: SigningConfig = DefaultSigningConfig
     signing_config_map: Optional[Dict[str, SigningConfig]] = None
-    connect_timeout: Optional[float] = 15.0
-    read_timeout: Optional[float] = None
+    connect_timeout: Optional[float] = 60.0 * 60
+    read_timeout: Optional[float] = 60.0 * 30
 
     def __init__(
         self, path: str = None, section: str = "", override: Dict[str, Any] = None
