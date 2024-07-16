@@ -1,4 +1,5 @@
 """This module contains aptly client class and all associated data types"""
+
 import logging
 import re
 import os
@@ -388,13 +389,21 @@ class Client:  # pylint: disable=too-many-public-methods
     publish_url_path: ClassVar[str] = "api/publish"
     packages_url_path: ClassVar[str] = "api/packages"
 
+    url: str
+    base_headers: dict[str, str]
+    http: urllib3.PoolManager
+    max_workers: int
+    default_signing_config: SigningConfig
+    signing_config_map: Dict[str, SigningConfig]
+
     def __init__(
         self,
         url: str,
         max_workers: int = 10,
         default_signing_config: SigningConfig = DefaultSigningConfig,
         signing_config_map: Dict[str, SigningConfig] = None,
-        timeout: urllib3.Timeout = urllib3.Timeout(connect=15.0, read=None),
+        timeout: float = 3600.0,
+        retries: int = 0,
     ) -> None:
         parsed_url = urllib3.util.parse_url(url)
         if parsed_url.auth:
@@ -405,7 +414,11 @@ class Client:  # pylint: disable=too-many-public-methods
             self.base_headers = urllib3.util.make_headers(
                 user_agent=f"aptly-ctl/{VERSION}"
             )
-        self.http = urllib3.PoolManager(headers=self.base_headers, timeout=timeout)
+        self.http = urllib3.PoolManager(
+            headers=self.base_headers,
+            timeout=timeout,
+            retries=urllib3.Retry(retries, redirect=3),
+        )
         self.url = url
         self.max_workers = max_workers
         self.default_signing_config = default_signing_config

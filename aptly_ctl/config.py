@@ -10,6 +10,8 @@ log = logging.getLogger(__name__)
 
 CONFIG_FILE_SUFFIXES = ("json", "conf", "cfg")
 DEFAULT_CONFIG_FILE_LOCATIONS_PATTERNS: Tuple[str, ...] = ("/etc/aptly-ctl.",)
+DEFAULT_TIMEOUT = 3600.0
+DEFAULT_RETRIES = 0
 
 if "HOME" in os.environ:
     DEFAULT_CONFIG_FILE_LOCATIONS_PATTERNS = (
@@ -29,8 +31,8 @@ class Config:
     url: str = "http://localhost:8090/"
     default_signing_config: SigningConfig = DefaultSigningConfig
     signing_config_map: Optional[Dict[str, SigningConfig]] = None
-    connect_timeout: Optional[float] = 60.0 * 60
-    read_timeout: Optional[float] = 60.0 * 30
+    timeout: float
+    retries: int
 
     def __init__(
         self, path: str = None, section: str = "", override: Dict[str, Any] = None
@@ -105,15 +107,15 @@ class Config:
                 )
             self.signing_config_map = signing_config_map if signing_config_map else None
 
-        if "connect_timeout" in override:
-            self.connect_timeout = float(override["connect_timeout"])
-        elif "connect_timeout" in config_section:
-            self.connect_timeout = float(config_section["connect_timeout"])
+        if "timeout" in override:
+            self.timeout = float(override["timeout"])
+        else:
+            self.timeout = float(config_section.get("timeout", DEFAULT_TIMEOUT))
 
-        if "read_timeout" in override:
-            self.read_timeout = float(override["read_timeout"])
-        elif "read_timeout" in config_section:
-            self.read_timeout = float(config_section["read_timeout"])
+        if "retries" in override:
+            self.retries = float(override["retries"])
+        else:
+            self.retries = float(config_section.get("retries", DEFAULT_RETRIES))
 
 
 def parse_override_dict(keys: Sequence[str]) -> Dict[str, Any]:

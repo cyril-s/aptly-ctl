@@ -1886,7 +1886,8 @@ def main() -> None:
         url=config.url,
         default_signing_config=config.default_signing_config,
         signing_config_map=config.signing_config_map,
-        timeout=Timeout(connect=config.connect_timeout, read=config.read_timeout),
+        timeout=config.timeout,
+        retries=config.retries,
     )
 
     try:
